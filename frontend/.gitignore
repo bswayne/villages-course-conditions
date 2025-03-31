@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+unofficialguidetothevillages-firebase-adminsdk-mm71t-947b26d826.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
