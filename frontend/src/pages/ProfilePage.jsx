@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'; 
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -173,6 +174,7 @@ function ProfilePage() {
     const [error, setError] = useState('');
     const [saveStatus, setSaveStatus] = useState({ saving: false, error: '', success: false });
     const [selectedDisplayFormat, setSelectedDisplayFormat] = useState(displayFormats[0]); // Default to first format
+    const { refreshUserProfile } = useAuth();
 
     // Helper to guess format based on stored name (if needed on load)
     const determineFormatFromDisplayName = (fName, lName, village, storedDisplay) => {
@@ -259,7 +261,7 @@ function ProfilePage() {
             setSelectedDisplayFormat(updatedFormat);
             setDerivedDisplayName(generateDisplayName(data.firstName, data.lastName, updatedVillage, updatedFormat) || data.email || '');
 
-
+            await refreshUserProfile();
             setSaveStatus({ saving: false, error: '', success: true });
             setTimeout(() => setSaveStatus(prev => ({ ...prev, success: false })), 3000);
 
@@ -269,13 +271,6 @@ function ProfilePage() {
              setSaveStatus({ saving: false, error: errMsg, success: false });
          }
      };
-
-    // --- Placeholder functions for Account Admin actions ---
-    // Logout is handled in Navbar
-    // Deletion needs client-side re-auth flow (complex)
-    // const handleResetConsent = () => { alert("Reset Privacy Consent - Not implemented in web yet."); };
-    // const handleDeleteAccount = () => { alert("Delete Account - Requires secure re-authentication flow (Not implemented)."); };
-    // ---
 
     if (loading) {
         return <Container sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Container>;
@@ -291,21 +286,18 @@ function ProfilePage() {
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
+            <Box sx={{ mb: 1 }}>
+               <Button
+                  variant="text"
+                  startIcon={<ArrowBackIcon />}
+                  onClick={() => navigate(-1)} // Go back one step
+                >
+                  Back
+                </Button>
+            </Box>
             <Typography variant="h4" component="h1" gutterBottom>
                 User Profile
             </Typography>
-
-            {/* Account Admin Card (Simplified) */}
-            {/* <Card variant="outlined" sx={{ mb: 3 }}> */}
-                {/* <CardContent> */}
-                    {/* <Typography variant="h6" gutterBottom>Account Administration</Typography> */}
-                    {/* <Stack direction="row" spacing={1} flexWrap="wrap"> */}
-                        {/* Logout button is in Navbar */}
-                         {/* <Button size="small" variant="outlined" onClick={handleResetConsent}>Reset Privacy Consent</Button> */}
-                         {/* <Button size="small" variant="contained" color="error" onClick={handleDeleteAccount}>Delete Account</Button> */}
-                     {/* </Stack> */}
-                 {/* </CardContent> */}
-             {/* </Card> */}
 
              {/* Display Preferences Form */}
              <Card variant="outlined">

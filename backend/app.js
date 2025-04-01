@@ -7,6 +7,7 @@ const verifyFirebaseToken = require('./middleware/auth'); // Keep for example pr
 const courseRoutes = require('./routes/courseRoutes');
 const conditionRoutes = require('./routes/conditionRoutes');
 const userRoutes = require('./routes/userRoutes');
+
 const app = express();
 
 // --- Middleware ---

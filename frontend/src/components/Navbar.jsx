@@ -10,9 +10,9 @@ import IconButton from '@mui/material/IconButton'; // For potential icon button
 import AccountCircle from '@mui/icons-material/AccountCircle'; // For layout
 
 function Navbar() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, userProfile, logout } = useAuth();
   const navigate = useNavigate();
-
+  const displayName = userProfile?.displayName || currentUser?.email || 'User';
   const handleLogout = async () => {
     try {
       await logout();
@@ -23,58 +23,55 @@ function Navbar() {
   };
 
   return (
-    <AppBar position="static"> {/* Or "sticky", etc. */}
-      <Toolbar>
-        {/* Title - Link to Home */}
-        <Typography
-          variant="h6"
-          size={{ flexGrow: 1, color: 'inherit', textDecoration: 'none' }} // Inherit color, remove underline
-        >
-          Villages Course Conditions
-        </Typography>
+    <AppBar position="static">
+    <Toolbar>
+      <Button color="inherit" component={RouterLink} to="/select-course-type">
+        Courses
+      </Button>
+      <Box sx={{ flexGrow: 1 }} />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {currentUser ? (
+          <>
+            {/* --- Use derived displayName --- */}
+            <Typography variant="body2" component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+               {displayName}
+             </Typography>
+             {/* --- End Change --- */}
 
-        {/* Navigation Links */}
-        <Button color="inherit" component={RouterLink} to="/">
-          Courses
-        </Button>
+            <IconButton /* Profile Button */
+              color="inherit"
+              component={RouterLink}
+              to="/profile"
+              aria-label="account of current user"
+              title="Profile"
+            >
+              <AccountCircle />
+            </IconButton>
 
-        {/* Auth Section */}
-        <Box size={{ flexGrow: 1 }}> 
-          {currentUser ? (
-            <>
-              <Typography variant="body2" component="span" sx={{ mr: 2, display: { xs: 'none', sm: 'inline' } }}>
-                {currentUser.email}
-              </Typography>
-
-              <IconButton
-                color="inherit"
-                component={RouterLink}
-                to="/profile" // <-- Link to the new profile route
-                aria-label="account of current user"
-                title="Profile" // Tooltip
-              >
-                <AccountCircle />
-              </IconButton>
-
-              <Button color="inherit" variant="outlined" size="small" onClick={handleLogout}>
-                Logout
-              </Button>
-            </>
-          ) : (
-            <Button color="inherit" variant="outlined" size="small" component={RouterLink} to="/login">
-              Login
+            <Button /* Logout Button */
+              color="inherit"
+              variant="outlined"
+              size="small"
+              onClick={handleLogout}
+            >
+              Logout
             </Button>
-          )}
-          {/* Optional Signup Button */}
-          {/* {!currentUser && (
-            <Button color="inherit" component={RouterLink} to="/signup" sx={{ ml: 1 }}>
-              Sign Up
-            </Button>
-          )} */}
-        </Box>
-      </Toolbar>
-    </AppBar>
-  );
+          </>
+        ) : (
+           <Button /* Login Button */
+             color="inherit"
+             variant="outlined"
+             size="small"
+             component={RouterLink}
+             to="/login"
+           >
+             Login
+           </Button>
+         )}
+      </Box>
+    </Toolbar>
+  </AppBar>
+);
 }
 
 export default Navbar;

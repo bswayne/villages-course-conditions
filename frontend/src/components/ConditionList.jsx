@@ -92,14 +92,10 @@ function ConditionList({ conditions }) {
               <Grid xs={12} sm="auto">
                  {/* Display rating using MUI Rating */}
                  <Rating name={`rating-${condition.id}`} value={condition.rating || 0} readOnly size="small"/>
-                 {/* Or display text rating */}
-                 {/* <Typography variant="h6" component="span" sx={{ mr: 1 }}>
-                    Rating: {condition.rating}/5
-                 </Typography> */}
               </Grid>
               <Grid xs={12} sm>
                 <Typography variant="body2" color="text.secondary" align="right">
-                  Played On: {formatDate(condition.date_played)}
+                  Round played by: {condition.user_display_name || 'Anonymous'} on {formatDate(condition.date_played)}
                 </Typography>
               </Grid>
             </Grid>

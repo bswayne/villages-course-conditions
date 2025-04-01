@@ -1,0 +1,35 @@
+name: Vault Integration
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  vault-auth:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # ⬅️ REQUIRED to get OIDC token
+      contents: read
+
+    steps:
+    - name: Request GitHub OIDC token
+      id: oidc
+      run: |
+        TOKEN=$(curl -sLS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+        echo "OIDC_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+    - name: Authenticate to Vault
+      id: vault-login
+      run: |
+        RESPONSE=$(curl -s --request POST https://vault.bcjs.us/v1/auth/jwt/login \
+          --data "{\"jwt\": \"$OIDC_TOKEN\", \"role\": \"github-actions-role\"}")
+        VAULT_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
+        echo "::add-mask::$VAULT_TOKEN"
+        echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+
+    - name: Fetch secret from Vault
+      run: |
+        curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+             https://vault.bcjs.us/v1/secret/data/ci/my-secret \
+             | jq -r '.data.data'

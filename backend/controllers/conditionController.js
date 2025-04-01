@@ -34,6 +34,7 @@ exports.getConditionsByCourse = async (req, res) => {
                          user_id: data.user_id,
                          user_email: data.user_email || null,
                          rating: data.rating,
+                         user_display_name: data.user_display_name || null,
                          comment: data.comment || null,
                          date_played: data.date_played, // The string 'YYYY-MM-DD'
                          timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : null,
@@ -41,21 +42,6 @@ exports.getConditionsByCourse = async (req, res) => {
                 }
                 // --- END ADD ---
             });
-        // Map the data according to the new model
-        // const conditions = conditionsSnapshot.docs.map(doc => {
-        //     const data = doc.data();
-        //     return {
-        //         id: doc.id,                     // Document ID
-        //         course_id: data.course_id,
-        //         user_id: data.user_id,
-        //         user_email: data.user_email || null, // Handle if email wasn't stored
-        //         rating: data.rating,
-        //         comment: data.comment || null,   // Handle if comment wasn't stored
-        //         // Convert Firestore Timestamps back to JS Dates for the frontend
-        //         date_played: data.date_played || null,
-        //         timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : null,
-        //     };
-        // });
 
         res.status(200).json(conditions);
 
@@ -75,12 +61,32 @@ exports.getConditionsByCourse = async (req, res) => {
 // --- Updated: Add condition to 'villages_course_conditions' ---
 exports.addCondition = async (req, res) => {
     try {
-        // Extract data matching the form/frontend request body
         const { courseId, rating, comment, conditionDate } = req.body;
-        // Get user info from the auth middleware
         const userId = req.user.uid;
         const userEmail = req.user.email;
-
+        // --- Get display name from Firebase Auth token (best source) ---
+        let userDisplayName = null;
+        try {
+            const userDocRef = db.collection('users').doc(userId);
+            const userDoc = await userDocRef.get();
+            if (userDoc.exists) {
+                userDisplayName = userDoc.data().display_name || null; // Get from 'display_name' field
+            }
+        } catch (profileError) {
+            console.error(`Error fetching Firestore profile for ${userId} during addCondition:`, profileError);
+            // Decide how critical this is - maybe fallback to token name or fail?
+            // For now, let the check below handle it if null.
+        }
+        if (!userDisplayName && req.user.name) {
+            console.warn(`Using display name from token for ${userId} as Firestore fetch failed or profile/field missing.`);
+            userDisplayName = req.user.name;
+        }
+        if (!userDisplayName) {
+            console.warn(`User ${userId} (${userEmail}) attempted to add condition without a display name set in Auth profile.`);
+            // You could fetch the profile from Firestore here as a fallback, but it's better
+            // to rely on the frontend preventing the submission if the profile/display name is missing.
+            return res.status(400).send('User display name is required. Please update your profile.');
+        }
         // Basic Validation (keep this)
         if (!courseId || !rating || !conditionDate) {
             return res.status(400).send('Missing required fields: courseId, rating, conditionDate');
@@ -101,6 +107,7 @@ exports.addCondition = async (req, res) => {
             course_id: courseId,                         // Reference to unofficial_locations ID
             user_id: userId,                             // Firebase Auth UID
             user_email: userEmail || null,               // User's email (optional)
+            user_display_name: userDisplayName,
             rating: Number(rating),                      // Ensure rating is a number
             comment: comment || null,                    // Store comment or null
             date_played: conditionDate,        // Store the 'YYYY-MM-DD' string directly

@@ -70,7 +70,7 @@ exports.updateUserProfile = async (req, res) => {
 
         // Construct update object with only provided fields (using snake_case for Firestore)
         const updateData = {};
-        if (firstName !== undefined) updateData.first_name = firstName; // Allow empty string? Add validation if not.
+        if (firstName !== undefined) updateData.first_name = firstName; 
         if (lastName !== undefined) updateData.last_name = lastName;
         if (village !== undefined) updateData.village = village;
         if (displayName !== undefined) updateData.display_name = displayName;
@@ -79,7 +79,7 @@ exports.updateUserProfile = async (req, res) => {
         // Use set with merge:true to create the doc if it doesn't exist, or update existing fields
         await userDocRef.set(updateData, { merge: true });
 
-        console.log(`User profile updated for UID: ${userId}`);
+        console.log(`User profile updated for UID: ${userId} with displayName: ${displayName}`);
 
         // Fetch the updated profile to return it
         const updatedDoc = await userDocRef.get();
@@ -97,6 +97,16 @@ exports.updateUserProfile = async (req, res) => {
              displayName: updatedUserData.display_name || req.user.name || req.user.email,
         };
 
+        try {
+            await admin.auth().updateUser(userId, {
+                 displayName: profileData.displayName // Use the final display name from Firestore
+             });
+            console.log(`Successfully updated Firebase Auth display name for ${userId}`);
+         } catch (authError) {
+            console.error(`Failed to update Firebase Auth display name for ${userId}:`, authError);
+             // Log the error but don't fail the whole request just for this
+         }
+
         res.status(200).json(profileData); // Return the updated profile
 
     } catch (error) {
@@ -104,9 +114,3 @@ exports.updateUserProfile = async (req, res) => {
         res.status(500).send('Error updating user profile.');
     }
 };
-
-// NOTE: Account Deletion is complex and requires re-authentication.
-// It's generally better handled purely on the client-side using the Firebase JS SDK
-// after re-authenticating the user there, rather than trying to do it via a backend API call
-// without the re-auth context. The backend *could* delete the Firestore 'users' doc,
-// but deleting the actual Firebase Auth user requires client-side re-auth.

@@ -66,11 +66,11 @@ function ConditionForm({ courseId, onConditionAdded, onCancel }) {
             onChange={(e) => setRating(e.target.value)}
             disabled={submitting}
           >
-            <MenuItem value="1">1 - Poor</MenuItem>
-            <MenuItem value="2">2 - Fair</MenuItem>
-            <MenuItem value="3">3 - Average</MenuItem>
-            <MenuItem value="4">4 - Good</MenuItem>
             <MenuItem value="5">5 - Excellent</MenuItem>
+            <MenuItem value="4">4 - Good</MenuItem>
+            <MenuItem value="3">3 - Average</MenuItem>
+            <MenuItem value="2">2 - Fair</MenuItem>
+            <MenuItem value="1">1 - Poor</MenuItem>
           </Select>
         </FormControl>
 

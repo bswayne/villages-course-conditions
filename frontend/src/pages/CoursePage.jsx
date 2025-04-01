@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import ConditionForm from '../components/ConditionForm'; // Will update this next
-import ConditionList from '../components/ConditionList'; // Will update this next
+import ConditionForm from '../components/ConditionForm'; 
+import ConditionList from '../components/ConditionList'; 
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -17,13 +17,14 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 function CoursePage() {
   const { courseId } = useParams();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [courseName, setCourseName] = useState(`Course ${courseId}`); // Placeholder
+  const [courseName, setCourseName] = useState(`Course`); // Placeholder
   const [conditions, setConditions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const hasDisplayName = !!userProfile?.displayName?.trim();
 
   // Fetch conditions function
   const fetchConditions = async () => {
@@ -48,10 +49,10 @@ function CoursePage() {
         // Fetch course details (optional, adjust API if needed)
         try {
              const courseRes = await api.get(`/courses/${courseId}`);
-             setCourseName(courseRes.data.name || `Course ${courseId}`);
+             setCourseName(courseRes.data.locationName || `Course ${courseId}`);
         } catch (courseErr) {
              console.warn("Could not fetch course details:", courseErr);
-             // Keep placeholder name
+             setCourseName(`Course ${courseId}`);
         }
 
         // Fetch conditions
@@ -73,7 +74,7 @@ function CoursePage() {
     setShowForm(false);
   };
 
-  if (loading) {
+  if (authLoading || loading){
     return (
       <Container sx={{ textAlign: 'center', py: 5 }}>
         <CircularProgress />
@@ -99,42 +100,66 @@ function CoursePage() {
 
       {/* Only show main error if conditions failed AND list is empty */}
       {error && conditions.length === 0 && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-      {/* Show error even if list exists, but less prominently? */}
-      {/* {error && conditions.length > 0 && <Alert severity="warning" sx={{ mb: 3 }}>Could not refresh conditions: {error}</Alert>} */}
+
 
       {/* Add Condition Section */}
       {currentUser ? (
         <Box sx={{ mb: 3 }}>
-          {!showForm && (
+          {/* Case 1: User has Display Name, show button or form */}
+          {hasDisplayName && !showForm && (
             <Button variant="contained" color="primary" onClick={() => setShowForm(true)}>
               Report Today's Conditions
             </Button>
           )}
-          {showForm && (
+          {hasDisplayName && showForm && (
             <Card variant="outlined" sx={{ mt: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>Add New Report</Typography>
                 <ConditionForm
                   courseId={courseId}
+                  // Pass user's display name to the form if needed for display/confirmation
+                  // userDisplayName={userProfile.displayName}
                   onConditionAdded={handleConditionAdded}
                   onCancel={() => setShowForm(false)}
                 />
               </CardContent>
             </Card>
           )}
+
+          {/* Case 2: User logged in BUT NO Display Name */}
+          {!hasDisplayName && (
+            <Alert severity="info">
+              Please set up your display name on your profile before submitting condition reports.
+              <Button
+                 size="small"
+                 variant="outlined"
+                 sx={{ ml: 2 }}
+                 onClick={() => navigate('/profile', { state: { from: location } })} // Navigate to profile, pass current location
+               >
+                 Go to Profile
+               </Button>
+            </Alert>
+          )}
         </Box>
       ) : (
+        // Case 3: User not logged in
         <Alert severity="info" sx={{ mb: 3 }}>
-          <Link component={RouterLink} to="/login">Login</Link> to add a condition report.
+          <Link component={RouterLink} to="/login">Login</Link> to view or add condition reports.
         </Alert>
       )}
+      {/* --- End Condition Reporting Section Logic --- */}
+
 
       {/* Condition List Section */}
-      <Typography variant="h5" component="h2" gutterBottom>
-        Recent Reports
+      <Typography variant="h5" component="h2" gutterBottom sx={{mt: 4}}>
+        Recent Reports (Last 7 Days)
       </Typography>
-      <ConditionList conditions={conditions} />
-
+      {!loading && conditions.length === 0 && !error && (
+          <Typography>No condition reports submitted for this course in the last 7 days.</Typography>
+       )}
+      {conditions.length > 0 && (
+          <ConditionList conditions={conditions} />
+       )}
     </Container>
   );
 }
