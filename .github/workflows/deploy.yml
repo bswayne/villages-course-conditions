@@ -1,35 +1,208 @@
-name: Vault Integration
+name: Deploy Villages Conditions App
 
 on:
   push:
-    branches: [main]
+    branches: [main] # Trigger on push to main branch
+
+# Define environment variables usable across jobs
+env:
+  # Replace with your Vault address
+  VAULT_ADDR: https://vault.bcjs.us
+  # Replace with your Vault role for GitHub Actions
+  VAULT_ROLE: github-actions-role
+  # Define paths to secrets in Vault
+  BACKEND_SECRETS_PATH: secret/data/ci/villages-conditions/backend
+  FRONTEND_SECRETS_PATH: secret/data/ci/villages-conditions/frontend
+  # Define image names (replace with your registry if using one, e.g., ghcr.io/your-user/...)
+  BACKEND_IMAGE_NAME: villages-conditions-backend
+  FRONTEND_IMAGE_NAME: villages-conditions-frontend
+  # Define tag (using commit SHA is good practice)
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  vault-auth:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write     # ⬅️ REQUIRED to get OIDC token
+      id-token: write # Required for Vault OIDC auth
       contents: read
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 1. Authenticate to Vault using OIDC Token
     - name: Request GitHub OIDC token
       id: oidc
       run: |
-        TOKEN=$(curl -sLS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+        TOKEN=$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
           "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
-        echo "OIDC_TOKEN=$TOKEN" >> $GITHUB_ENV
+        if [ -z "$TOKEN" ]; then echo "::error::Failed to get OIDC token"; exit 1; fi
+        echo "OIDC_TOKEN=${TOKEN}" >> $GITHUB_ENV
+        echo "::add-mask::${TOKEN}" # Mask the OIDC token itself
 
     - name: Authenticate to Vault
       id: vault-login
       run: |
-        RESPONSE=$(curl -s --request POST https://vault.bcjs.us/v1/auth/jwt/login \
-          --data "{\"jwt\": \"$OIDC_TOKEN\", \"role\": \"github-actions-role\"}")
-        VAULT_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
-        echo "::add-mask::$VAULT_TOKEN"
-        echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+        echo "Attempting Vault login to ${{ env.VAULT_ADDR }} with role ${{ env.VAULT_ROLE }}"
+        RESPONSE=$(curl -fsS --request POST ${{ env.VAULT_ADDR }}/v1/auth/jwt/login \
+          --data "{\"jwt\": \"$OIDC_TOKEN\", \"role\": \"${{ env.VAULT_ROLE }}\"}")
+        # Check for successful response before trying to parse token
+        if echo "$RESPONSE" | jq -e '.auth.client_token' > /dev/null; then
+          VAULT_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
+          echo "Vault login successful."
+          echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
+          echo "::add-mask::$VAULT_TOKEN" # Mask the Vault token
+        else
+          echo "::error::Vault login failed. Response:"
+          echo "$RESPONSE"
+          exit 1
+        fi
 
-    - name: Fetch secret from Vault
+    # 2. Fetch Secrets from Vault
+    - name: Fetch Backend Secrets from Vault
+      id: fetch-backend-secrets
       run: |
-        curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
-             https://vault.bcjs.us/v1/secret/data/ci/my-secret \
-             | jq -r '.data.data'
+        echo "Fetching secrets from ${{ env.BACKEND_SECRETS_PATH }}"
+        SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
+             "${{ env.VAULT_ADDR }}/v1/${{ env.BACKEND_SECRETS_PATH }}")
+        # Check for successful response and data
+        if echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
+          FIREBASE_JSON=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
+          FRONTEND_URL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"') # Provide default
+          # Check if secrets were actually found
+          if [ -z "$FIREBASE_JSON" ] || [ "$FIREBASE_JSON" == "null" ]; then echo "::error::FIREBASE_ADMIN_SDK_JSON not found in Vault"; exit 1; fi
+          echo "Fetched backend secrets."
+          # Export for subsequent steps & mask the sensitive one
+          echo "FIREBASE_ADMIN_SDK_JSON_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "$FIREBASE_JSON" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "::add-mask::$FIREBASE_JSON"
+          echo "DEPLOY_FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
+        else
+          echo "::error::Failed to fetch backend secrets or data is empty. Response:"
+          echo "$SECRET_RESPONSE"
+          exit 1
+        fi
+
+    - name: Fetch Frontend Secrets from Vault
+      id: fetch-frontend-secrets
+      run: |
+        echo "Fetching secrets from ${{ env.FRONTEND_SECRETS_PATH }}"
+        SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
+             "${{ env.VAULT_ADDR }}/v1/${{ env.FRONTEND_SECRETS_PATH }}")
+        if echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
+          API_URL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.VITE_API_BASE_URL // "/api"') # Default
+          if [ -z "$API_URL" ] || [ "$API_URL" == "null" ]; then echo "::warning::VITE_API_BASE_URL not found in Vault, using default '/api'"; API_URL="/api"; fi
+          echo "Fetched frontend secrets."
+          echo "DEPLOY_VITE_API_BASE_URL=$API_URL" >> $GITHUB_ENV
+        else
+          echo "::error::Failed to fetch frontend secrets or data is empty. Response:"
+          echo "$SECRET_RESPONSE"
+          exit 1
+        fi
+
+    # 3. Set up Docker Buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 4. (Optional) Login to Docker Registry (e.g., Docker Hub or GHCR)
+    #    Store credentials in GitHub Secrets (DOCKERHUB_USERNAME, DOCKERHUB_TOKEN or GHCR_PAT)
+    # - name: Login to Docker Hub
+    #   uses: docker/login-action@v3
+    #   with:
+    #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+    #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+    # - name: Login to GitHub Container Registry
+    #   uses: docker/login-action@v3
+    #   with:
+    #     registry: ghcr.io
+    #     username: ${{ github.actor }}
+    #     password: ${{ secrets.GITHUB_TOKEN }} # Use default GITHUB_TOKEN
+
+    # 5. Build and Push Docker Images (Adapt image names if using registry)
+    - name: Build and Push Backend Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: false # Set to true if pushing to a registry
+        tags: ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.BACKEND_IMAGE_NAME }}:latest # Add registry prefix if pushing
+        # No build args needed here - secrets are handled at runtime
+
+    - name: Build and Push Frontend Image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: false # Set to true if pushing to a registry
+        tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest # Add registry prefix if pushing
+        build-args: |
+          VITE_API_BASE_URL=${{ env.DEPLOY_VITE_API_BASE_URL }}
+
+    # 6. Deploy to Local Server via SSH
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.DEPLOY_HOST }} # IP or hostname of your local server (Store in GitHub Secrets)
+        username: ${{ secrets.DEPLOY_USERNAME }} # User on the server (Store in GitHub Secrets)
+        key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} # Private SSH key for the user (Store in GitHub Secrets)
+        port: ${{ secrets.DEPLOY_SSH_PORT || 22 }} # SSH port (optional, defaults to 22)
+        script: |
+          # Navigate to the deployment directory on the server
+          # Replace with the actual path where your docker-compose.yml is located
+          export DEPLOY_DIR="/path/to/your/deployment/villages-conditions"
+          mkdir -p $DEPLOY_DIR
+          cd $DEPLOY_DIR
+
+          # (Optional) Copy docker-compose.yml if not already on server
+          # Consider checking it into git and pulling instead
+          # echo "${{ github.workspace }}/docker-compose.yml" # Debug: Check path
+          # You might need to scp the file or ensure it's pulled via git on the server
+
+          # Create/Update .env file with secrets fetched from Vault
+          # IMPORTANT: Ensure proper quoting for the multi-line JSON content
+          echo "Creating/Updating .env file on server..."
+          cat <<EOF > .env
+          # Environment variables for docker-compose
+          FRONTEND_URL=${{ env.DEPLOY_FRONTEND_URL }}
+          VITE_API_BASE_URL=${{ env.DEPLOY_VITE_API_BASE_URL }}
+          # Escape special characters in JSON for the .env file if necessary,
+          # but docker-compose should handle multi-line vars okay with <<EOF
+          FIREBASE_ADMIN_SDK_JSON_CONTENT='${{ env.FIREBASE_ADMIN_SDK_JSON_CONTENT }}'
+          # Define image tags for docker-compose to use
+          BACKEND_IMAGE_TAG=${{ env.IMAGE_TAG }}
+          FRONTEND_IMAGE_TAG=${{ env.IMAGE_TAG }}
+          EOF
+          echo ".env file updated."
+
+          # Update docker-compose.yml to use the tags from .env
+          # (Modify your docker-compose.yml ONCE to use these variables)
+          # Example modification in docker-compose.yml:
+          # services:
+          #   backend:
+          #     image: ${{ env.BACKEND_IMAGE_NAME }}:${BACKEND_IMAGE_TAG:-latest} # Use tag from .env, fallback to latest
+          #     build: ./backend # Keep build context for local dev if needed
+          #   frontend:
+          #     image: ${{ env.FRONTEND_IMAGE_NAME }}:${FRONTEND_IMAGE_TAG:-latest}
+          #     build: # ...
+
+          # Login to registry if you pushed images (use credentials stored on server or pass via secrets)
+          # echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          # echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Pull the specific tagged images (if you pushed them)
+          # docker pull ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # docker pull ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+          # Use Docker Compose to recreate and start containers
+          # --remove-orphans cleans up old containers if service names change
+          # Docker compose automatically picks up the .env file in the same directory
+          # Ensure docker-compose V2 is installed (usually `docker compose`)
+          echo "Running docker compose up..."
+          docker compose --env-file .env up -d --remove-orphans --force-recreate --build # Add --build if you didn't push/pull
+
+          # (Optional) Clean up dangling images
+          echo "Cleaning up dangling Docker images..."
+          docker image prune -f
+
+          echo "Deployment complete!"
