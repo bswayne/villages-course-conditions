@@ -101,15 +101,28 @@ jobs:
         echo "Fetched frontend secrets. Exporting VITE_ variables..."
         echo "$SECRET_RESPONSE" | jq -r '.data.data | to_entries[] | select(.key | startswith("VITE_")) | "\(.key)=\(.value)"' >> $GITHUB_ENV
 
-        if [ -z "${VITE_FIREBASE_API_KEY}" ] || [ "${VITE_FIREBASE_API_KEY}" == "null" ]; then
-          echo "::error::VITE_FIREBASE_API_KEY not found in Vault at ${{ env.FRONTEND_SECRETS_PATH }}"
-          exit 1
+        API_BASE_URL_CHECK=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.VITE_API_BASE_URL // ""')
+
+        if [ -z "$API_BASE_URL_CHECK" ]; then
+            echo "::warning::VITE_API_BASE_URL not found or empty in Vault, setting default '/api' for build-args."
+            # Set the default directly in GITHUB_ENV if it wasn't found by the jq export
+            echo "VITE_API_BASE_URL=/api" >> $GITHUB_ENV
         fi
-         if [ -z "${VITE_API_BASE_URL}" ] || [ "${VITE_API_BASE_URL}" == "null" ]; then
-           echo "::warning::VITE_API_BASE_URL not found in Vault, using default '/api'"
-           echo "VITE_API_BASE_URL=/api" >> $GITHUB_ENV
-         fi
+
+        echo "Frontend VITE_ variables prepared for GITHUB_ENV."
+    
+    - name: Verify Frontend Secrets Export
+      run: |
+        echo "Verifying essential frontend environment variables..."
+        if [ -z "${{ env.VITE_FIREBASE_API_KEY }}" ]; then
+           echo "::error::Verification failed: VITE_FIREBASE_API_KEY was not set in environment."
+           exit 1
+        else
+          echo "VITE_FIREBASE_API_KEY=*** (Verified)"
+        fi
+        echo "Frontend environment variables verified."
         echo "Frontend VITE_ variables exported."
+        
 
     # 3. Set up Docker Buildx
     - name: Set up Docker Buildx
