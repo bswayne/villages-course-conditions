@@ -38,10 +38,6 @@ jobs:
           "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
         if [ -z "$TOKEN" ]; then echo "::error::Failed to get OIDC token"; exit 1; fi
         ENCODED_TOKEN=$(echo -n "$TOKEN" | base64 -w0) # Use base64 encoding
-        echo $ENCODED_TOKEN > oidc_token_base64.txt
-        echo "::warning::Base64 Encoded OIDC Token: $ENCODED_TOKEN"
-        echo "$TOKEN" > oidc_token.txt
-        echo "::warning::Token saved to oidc_token.txt artifact (will be uploaded)."
         echo "OIDC_TOKEN=${TOKEN}" >> $GITHUB_ENV
         echo "::add-mask::${TOKEN}" # Mask the OIDC token itself
 
