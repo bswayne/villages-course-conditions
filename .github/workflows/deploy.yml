@@ -91,16 +91,25 @@ jobs:
         echo "Fetching secrets from ${{ env.FRONTEND_SECRETS_PATH }}"
         SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
              "${{ env.VAULT_ADDR }}/v1/${{ env.FRONTEND_SECRETS_PATH }}")
-        if echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
-          API_URL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.VITE_API_BASE_URL // "/api"') # Default
-          if [ -z "$API_URL" ] || [ "$API_URL" == "null" ]; then echo "::warning::VITE_API_BASE_URL not found in Vault, using default '/api'"; API_URL="/api"; fi
-          echo "Fetched frontend secrets."
-          echo "DEPLOY_VITE_API_BASE_URL=$API_URL" >> $GITHUB_ENV
-        else
+
+        if ! echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
           echo "::error::Failed to fetch frontend secrets or data is empty. Response:"
           echo "$SECRET_RESPONSE"
           exit 1
         fi
+
+        echo "Fetched frontend secrets. Exporting VITE_ variables..."
+        echo "$SECRET_RESPONSE" | jq -r '.data.data | to_entries[] | select(.key | startswith("VITE_")) | "\(.key)=\(.value)"' >> $GITHUB_ENV
+
+        if [ -z "${VITE_FIREBASE_API_KEY}" ] || [ "${VITE_FIREBASE_API_KEY}" == "null" ]; then
+          echo "::error::VITE_FIREBASE_API_KEY not found in Vault at ${{ env.FRONTEND_SECRETS_PATH }}"
+          exit 1
+        fi
+         if [ -z "${VITE_API_BASE_URL}" ] || [ "${VITE_API_BASE_URL}" == "null" ]; then
+           echo "::warning::VITE_API_BASE_URL not found in Vault, using default '/api'"
+           echo "VITE_API_BASE_URL=/api" >> $GITHUB_ENV
+         fi
+        echo "Frontend VITE_ variables exported."
 
     # 3. Set up Docker Buildx
     - name: Set up Docker Buildx
@@ -139,6 +148,13 @@ jobs:
         tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest # Add registry prefix if pushing
         build-args: |
           VITE_API_BASE_URL=${{ env.DEPLOY_VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY=${{ env.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN=${{ env.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID=${{ env.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET=${{ env.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID=${{ env.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID=${{ env.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID=${{ env.VITE_FIREBASE_MEASUREMENT_ID }}
 
     # 6. Deploy to Local Server via SSH
     - name: Deploy to Server
