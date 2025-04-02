@@ -11,8 +11,8 @@ env:
   # Replace with your Vault role for GitHub Actions
   VAULT_ROLE: github-actions-role
   # Define paths to secrets in Vault
-  BACKEND_SECRETS_PATH: secret/ci/villages-conditions/backend
-  FRONTEND_SECRETS_PATH: secret/ci/villages-conditions/frontend
+  BACKEND_SECRETS_PATH: secret/data/ci/villages-conditions/backend
+  FRONTEND_SECRETS_PATH: secret/data/ci/villages-conditions/frontend
   # Define image names (replace with your registry if using one, e.g., ghcr.io/your-user/...)
   BACKEND_IMAGE_NAME: villages-conditions-backend
   FRONTEND_IMAGE_NAME: villages-conditions-frontend
