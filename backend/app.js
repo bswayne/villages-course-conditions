@@ -37,10 +37,12 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).send('Something broke!');
 });
-
+console.log(`Current NODE_ENV: ${process.env.NODE_ENV}`);
 // --- Start Server ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-    console.log(`Allowing CORS for origin: ${process.env.FRONTEND_URL}`);
+    if (process.env.NODE_ENV !== 'production' && process.env.FRONTEND_URL) {
+        console.log(`Allowing CORS for local development origin: ${process.env.FRONTEND_URL}`);
+   }
 });
