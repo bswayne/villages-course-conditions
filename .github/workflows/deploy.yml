@@ -90,7 +90,7 @@ jobs:
         SECRET_ID_PATH="/etc/vault/approle_secret_id" 
 
         echo "--- Deploying to ${DEPLOY_DIR} ---"
-        cd $DEPLOY_DIR || exit 1
+        cd /home/bswayne/villages-conditions || exit 1
 
         # 1. Authenticate to Vault using AppRole Credentials from files
         echo "--- Authenticating to Vault from server ---"
