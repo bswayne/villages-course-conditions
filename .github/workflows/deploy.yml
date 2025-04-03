@@ -61,7 +61,7 @@ jobs:
         echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy_server
         chmod 600 ~/.ssh/id_deploy_server
         cat <<EOF > ~/.ssh/config
-        Host deploy-server-via-tunnel # Alias for the connection
+        Host deploy-server-via-tunnel
           HostName ${{ secrets.DEPLOY_HOST }}
           User ${{ secrets.DEPLOY_USERNAME }}
           IdentityFile ~/.ssh/id_deploy_server
@@ -73,28 +73,22 @@ jobs:
         echo "SSH config written for deploy-server-via-tunnel"
     
 
-    # 3. Deploy to Server via SSH
+    # 5. Deploy to Server via SSH
     - name: Deploy to Server
       uses: appleboy/ssh-action@v1.0.3
       env: # Pass only necessary vars FROM Action TO Remote Script
          IMAGE_TAG_ACTION: ${{ env.IMAGE_TAG }}
          VAULT_ADDR_ACTION: ${{ env.VAULT_ADDR }} # Pass Vault address if not set on server
-         # Pass API URL if needed by backend CORS config written to .env
          VITE_API_BASE_URL_ACTION: ${{ secrets.PROD_VITE_API_BASE_URL }}
-       
       with:
-        host: deploy-server-via-tunnel # <-- Use the alias from ssh config
+        host: deploy-server-via-tunnel 
         username: ${{ secrets.DEPLOY_USERNAME }} # User is implicitly defined by ssh config
         key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} # Key is implicitly defined by ssh config
         port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
         # Put the SERVER-SIDE script here
         script: |
-          set -e # Exit on error
-
-          # Variables for the remote script
-          # Use the correct path on YOUR server
-          export DEPLOY_DIR="/home/bswayne/villages-conditions" # <<< VERIFY/UPDATE THIS PATH
-          # Use VAULT_ADDR passed from GH Action env
+          set -e
+          export DEPLOY_DIR="/home/bswayne/villages-conditions"
           export VAULT_ADDR="${VAULT_ADDR_ACTION}"
           ROLE_ID_PATH="/etc/vault/approle_role_id"
           SECRET_ID_PATH="/etc/vault/approle_secret_id"
