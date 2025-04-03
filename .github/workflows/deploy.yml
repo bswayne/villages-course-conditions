@@ -70,7 +70,7 @@ jobs:
         # --- SCRIPT RUNNING ON YOUR TARGET SERVER ---
         set -e
 
-        DEPLOY_DIR="/home/bswayne/villages-conditions" # Your chosen directory
+        DEPLOY_DIR="/home/bswayne/villages-course-conditions" 
         VAULT_ADDR="${{ env.VAULT_ADDR }}"
         IMAGE_TAG="${{ env.IMAGE_TAG }}"
         VITE_API_BASE_URL="${{ secrets.PROD_VITE_API_BASE_URL }}"
