@@ -2,232 +2,133 @@ name: Deploy Villages Conditions App
 
 on:
   push:
-    branches: [main] # Trigger on push to main branch
+    branches: [main]
 
-# Define environment variables usable across jobs
 env:
-  # Replace with your Vault address
-  VAULT_ADDR: https://vault.bcjs.us
-  # Replace with your Vault role for GitHub Actions
-  VAULT_ROLE: github-actions-role
-  # Define paths to secrets in Vault
-  BACKEND_SECRETS_PATH: secret/data/ci/villages-conditions/backend
-  FRONTEND_SECRETS_PATH: secret/data/ci/villages-conditions/frontend
-  # Define image names (replace with your registry if using one, e.g., ghcr.io/your-user/...)
+  # Keep image names and tag definition
   BACKEND_IMAGE_NAME: villages-conditions-backend
   FRONTEND_IMAGE_NAME: villages-conditions-frontend
-  # Define tag (using commit SHA is good practice)
   IMAGE_TAG: ${{ github.sha }}
+  # VAULT_ADDR can be defined here or on server/in script
+  VAULT_ADDR: https://vault.bcjs.us
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Required for Vault OIDC auth
+      # id-token: write # No longer needed for Vault auth here
       contents: read
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 1. Authenticate to Vault using OIDC Token
-    - name: Request GitHub OIDC token
-      id: oidc
-      run: |
-        TOKEN=$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-          "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
-        if [ -z "$TOKEN" ]; then echo "::error::Failed to get OIDC token"; exit 1; fi
-        ENCODED_TOKEN=$(echo -n "$TOKEN" | base64 -w0) # Use base64 encoding
-        echo "OIDC_TOKEN=${TOKEN}" >> $GITHUB_ENV
-        echo "::add-mask::${TOKEN}" # Mask the OIDC token itself
+    # --- REMOVED Vault Auth & Secret Fetching Steps ---
 
-    - name: Authenticate to Vault
-      id: vault-login
-      run: |
-        echo "Attempting Vault login to ${{ env.VAULT_ADDR }} with role ${{ env.VAULT_ROLE }}"
-        RESPONSE=$(curl -fsS --request POST ${{ env.VAULT_ADDR }}/v1/auth/jwt/login \
-          --data "{\"jwt\": \"$OIDC_TOKEN\", \"role\": \"${{ env.VAULT_ROLE }}\"}")
-        # Check for successful response before trying to parse token
-        if echo "$RESPONSE" | jq -e '.auth.client_token' > /dev/null; then
-          VAULT_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
-          echo "Vault login successful."
-          echo "VAULT_TOKEN=$VAULT_TOKEN" >> $GITHUB_ENV
-          echo "::add-mask::$VAULT_TOKEN" # Mask the Vault token
-        else
-          echo "::error::Vault login failed. Response:"
-          echo "$RESPONSE"
-          exit 1
-        fi
-
-    # 2. Fetch Secrets from Vault
-    - name: Fetch Backend Secrets from Vault
-      id: fetch-backend-secrets
-      run: |
-        echo "Fetching secrets from ${{ env.BACKEND_SECRETS_PATH }}"
-        SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
-             "${{ env.VAULT_ADDR }}/v1/${{ env.BACKEND_SECRETS_PATH }}")
-        
-        if ! echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
-          echo "::error::Failed to fetch backend secrets or data is empty. Response:"
-          echo "$SECRET_RESPONSE"
-          exit 1
-        fi
-
-        FIREBASE_JSON=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
-        FRONTEND_URL_VAL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
-
-        if [ -z "$FIREBASE_JSON" ] || [ "$FIREBASE_JSON" == "null" ]; then
-          echo "::error::FIREBASE_ADMIN_SDK_JSON not found in Vault"; exit 1;
-        fi
-
-        echo "Fetched backend secrets."
-
-        echo "DEPLOY_FRONTEND_URL=$FRONTEND_URL_VAL" >> $GITHUB_ENV
-
-        ENCODED_FIREBASE_JSON=$(echo -n "$FIREBASE_JSON" | base64 -w0)
-        echo "firebase_json_b64=$ENCODED_FIREBASE_JSON" >> $GITHUB_OUTPUT
-
-        echo "Backend secrets processed and encoded."
-
-    - name: Fetch Frontend Secrets from Vault
-      id: fetch-frontend-secrets
-      run: |
-        echo "Fetching secrets from ${{ env.FRONTEND_SECRETS_PATH }}"
-        SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
-             "${{ env.VAULT_ADDR }}/v1/${{ env.FRONTEND_SECRETS_PATH }}")
-
-        if ! echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
-          echo "::error::Failed to fetch frontend secrets or data is empty. Response:"
-          echo "$SECRET_RESPONSE"
-          exit 1
-        fi
-
-        echo "Fetched frontend secrets. Exporting VITE_ variables..."
-        echo "$SECRET_RESPONSE" | jq -r '.data.data | to_entries[] | select(.key | startswith("VITE_")) | "\(.key)=\(.value)"' >> $GITHUB_ENV
-
-        API_BASE_URL_CHECK=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.VITE_API_BASE_URL // ""')
-        if [ -z "$API_BASE_URL_CHECK" ]; then
-            echo "::warning::VITE_API_BASE_URL not found or empty in Vault, setting default '/api' in GITHUB_ENV."
-            # Explicitly set the default in GITHUB_ENV if it wasn't found above
-            echo "VITE_API_BASE_URL=/api" >> $GITHUB_ENV
-        else
-             # Optional: Echo the value found if you want confirmation
-             echo "VITE_API_BASE_URL found in Vault and exported."
-        fi
-
-        echo "Frontend VITE_ variables prepared for GITHUB_ENV."
-    
-    - name: Verify Frontend Secrets Export
-      run: |
-        echo "Verifying essential frontend environment variables..."
-        if [ -z "${{ env.VITE_FIREBASE_API_KEY }}" ]; then
-           echo "::error::Verification failed: VITE_FIREBASE_API_KEY was not set in environment."
-           exit 1
-        else
-          echo "VITE_FIREBASE_API_KEY=*** (Verified)"
-        fi
-        echo "Frontend environment variables verified."
-        echo "Frontend VITE_ variables exported."
-        
-
-    # 3. Set up Docker Buildx
+    # 1. Set up Docker Buildx
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # 4. (Optional) Login to Docker Registry (e.g., Docker Hub or GHCR)
-    #    Store credentials in GitHub Secrets (DOCKERHUB_USERNAME, DOCKERHUB_TOKEN or GHCR_PAT)
-    # - name: Login to Docker Hub
-    #   uses: docker/login-action@v3
-    #   with:
-    #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-    #     password: ${{ secrets.DOCKERHUB_TOKEN }}
-    # - name: Login to GitHub Container Registry
-    #   uses: docker/login-action@v3
-    #   with:
-    #     registry: ghcr.io
-    #     username: ${{ github.actor }}
-    #     password: ${{ secrets.GITHUB_TOKEN }} # Use default GITHUB_TOKEN
-
-    # 5. Build and Push Docker Images (Adapt image names if using registry)
-    - name: Build and Push Backend Image
+    # 2. Build Docker Images (Pass only NON-Vault variables)
+    - name: Build Backend Image
       uses: docker/build-push-action@v5
       with:
         context: ./backend
         file: ./backend/Dockerfile
-        push: false # Set to true if pushing to a registry
+        push: false
         tags: ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.BACKEND_IMAGE_NAME }}:latest
         load: true
 
     - name: Build Frontend Image
+      id: build-frontend # Give step an ID to potentially get build args needed on server
       uses: docker/build-push-action@v5
       with:
         context: ./frontend
         file: ./frontend/Dockerfile
         push: false
         tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest
-        load: true 
-        build-args: |
-          VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
-          VITE_FIREBASE_API_KEY=${{ env.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN=${{ env.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID=${{ env.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET=${{ env.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID=${{ env.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID=${{ env.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_MEASUREMENT_ID=${{ env.VITE_FIREBASE_MEASUREMENT_ID }}
+        load: true
+        # We still need VITE_API_BASE_URL for the build, fetch from Vault HERE
+        # Or define it statically if it's fixed for production build
+        # build-args: |
+        #  VITE_API_BASE_URL=${{ secrets.PROD_API_BASE_URL }} # Example: Get from GH Secret
 
-    # 6. Deploy to Local Server via SSH
+    # 3. Deploy to Server via SSH
     - name: Deploy to Server
       uses: appleboy/ssh-action@v1.0.3
-      env: # Pass the ENCODED version
-         FIREBASE_JSON_B64_OUTPUT: ${{ steps.fetch-backend-secrets.outputs.firebase_json_b64 }}
-         DEPLOY_FRONTEND_URL_ACTION: ${{ env.DEPLOY_FRONTEND_URL }}
-         VITE_API_BASE_URL_ACTION: ${{ env.VITE_API_BASE_URL }}
+      env:
+         # Pass ONLY the image tag needed by the script
          IMAGE_TAG_ACTION: ${{ env.IMAGE_TAG }}
+         # Pass other non-secret vars if needed by the script/compose
+         # VITE_API_BASE_URL_ACTION: ${{ steps.build-frontend.outputs.build-args.VITE_API_BASE_URL }} # Example if needed
       with:
         host: ${{ secrets.DEPLOY_HOST }}
         username: ${{ secrets.DEPLOY_USERNAME }}
         key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
         port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
         script: |
-          export DEPLOY_DIR="/home/deployer/villages-conditions"
+          # --- SERVER-SIDE SCRIPT ---
+          export DEPLOY_DIR="/home/deployer/villages-conditions" # <<< UPDATE THIS PATH
+          export VAULT_ADDR="${{ env.VAULT_ADDR }}" # Use VAULT_ADDR from GH Action env
+          # Define paths to credentials ON THE SERVER
+          ROLE_ID_PATH="/etc/vault/approle_role_id" # Adjust if you stored elsewhere
+          SECRET_ID_PATH="/etc/vault/approle_secret_id" # Adjust if you stored elsewhere
+
           echo "--- Deploying to ${DEPLOY_DIR} ---"
-          mkdir -p $DEPLOY_DIR
           cd $DEPLOY_DIR || exit 1
 
-          echo "--- Decoding secrets and updating .env file ---"
-          # --- Decode the Base64 encoded JSON ---
-          DECODED_FIREBASE_JSON=$(echo "$FIREBASE_JSON_B64_OUTPUT" | base64 --decode)
-          if [ -z "$DECODED_FIREBASE_JSON" ]; then
-              echo "::error::Failed to decode Firebase JSON on server."
-              exit 1
-          fi
-          # --- End Decode ---
+          # 1. Authenticate to Vault using AppRole Credentials from files
+          echo "--- Authenticating to Vault from server ---"
+          if [ ! -f "$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found at $ROLE_ID_PATH"; exit 1; fi
+          if [ ! -f "$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found at $SECRET_ID_PATH"; exit 1; fi
 
-          # Write the DECODED JSON to the .env file
+          # Read credentials (handle potential errors)
+          VAULT_ROLE_ID=$(cat "$ROLE_ID_PATH")
+          VAULT_SECRET_ID=$(cat "$SECRET_ID_PATH") # Requires deployer user has read access via ACL/group
+          if [ -z "$VAULT_ROLE_ID" ]; then echo "::error::Failed to read RoleID"; exit 1; fi
+          if [ -z "$VAULT_SECRET_ID" ]; then echo "::error::Failed to read SecretID"; exit 1; fi
+
+          # Login using fetched credentials
+          VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID")
+          if [ -z "$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
+          echo "Vault AppRole login successful."
+
+          # 2. Fetch secrets using the obtained token & write .env
+          echo "--- Fetching secrets and updating .env file ---"
+          BACKEND_SECRET_DATA=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/backend | jq -r '.data.data')
+          # ... (Fetch FRONTEND_SECRET_DATA similarly) ...
+           FRONTEND_SECRET_DATA=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/frontend | jq -r '.data.data')
+
+          FIREBASE_JSON_CONTENT=$(echo "$BACKEND_SECRET_DATA" | jq -r '.FIREBASE_ADMIN_SDK_JSON')
+          FRONTEND_URL_VAL=$(echo "$BACKEND_SECRET_DATA" | jq -r '.FRONTEND_URL // "http://localhost:8080"')
+          VITE_API_URL_VAL=$(echo "$FRONTEND_SECRET_DATA" | jq -r '.VITE_API_BASE_URL // "/api"') # Still needed for backend CORS
+
+          if [ -z "$FIREBASE_JSON_CONTENT" ] || [ "$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
+
+          # Write .env
           printf '%s\n' \
-          "FRONTEND_URL=${DEPLOY_FRONTEND_URL_ACTION}" \
-          "VITE_API_BASE_URL=${VITE_API_BASE_URL_ACTION}" \
-          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${DECODED_FIREBASE_JSON}'" \ # Use decoded var
-          "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
+          "FRONTEND_URL=${FRONTEND_URL_VAL}" \
+          "VITE_API_BASE_URL=${VITE_API_URL_VAL}" \
+          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${FIREBASE_JSON_CONTENT}'" \
+          "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \ # Use tag passed from GH Action
           "FRONTEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
           > .env
-
-          if [ ! -s .env ]; then
-              echo "::error::Failed to write .env file on server."
-              exit 1
-          fi
           echo ".env file updated."
 
-          # Load built images if not pushing/pulling (requires docker save/load or different strategy)
-          # This part is tricky without pushing to a registry.
-          # For now, assuming --build in docker compose uses local context
-          # Ensure your docker-compose.yml has 'build:' contexts defined
+          # 3. Load images (if needed - see previous discussion)
+          #    If images were built with 'load: true' they exist locally for docker on the runner,
+          #    but NOT automatically on the target server unless pushed/pulled or saved/loaded.
+          #    Using '--build' in compose on the server is often simplest if Dockerfiles are present.
+          echo "--- Ensure Dockerfiles and context are available on server or push/pull images ---"
+          # Example: Ensure code is up-to-date if building on server
+          # git pull origin main
 
+          # 4. Run Docker Compose
           echo "--- Running docker compose up ---"
-          # Use --build flag if you didn't push/pull images
+          # Assumes docker-compose.yml has 'build:' sections if using --build
           docker compose --env-file .env up -d --remove-orphans --force-recreate --build
 
+          # 5. Clean up
           echo "--- Cleaning up dangling images ---"
           docker image prune -f
 
