@@ -76,14 +76,33 @@ jobs:
         FRONTEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/frontend)
         FIREBASE_JSON_CONTENT=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
         FRONTEND_URL_VAL=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
+        
+        # Extract frontend VITE_ variables
+        VITE_FB_API_KEY=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_API_KEY // ""')
+        VITE_FB_AUTH_DOMAIN=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_AUTH_DOMAIN // ""')
+        VITE_FB_PROJECT_ID=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_PROJECT_ID // ""')
+        VITE_FB_STORAGE_BUCKET=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_STORAGE_BUCKET // ""')
+        VITE_FB_MSG_SENDER_ID=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_MESSAGING_SENDER_ID // ""')
+        VITE_FB_APP_ID=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_APP_ID // ""')
+        VITE_FB_MEASUREMENT_ID=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_FIREBASE_MEASUREMENT_ID // ""')
 
+        # --- Check Essential Vars ---
         if [ -z "\$FIREBASE_JSON_CONTENT" ] || [ "\$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
+        if [ -z "\$VITE_FB_API_KEY" ] || [ "\$VITE_FB_API_KEY" == "null" ]; then echo "::error::Failed to get VITE_FIREBASE_API_KEY from Vault"; exit 1; fi
+
         printf '%s\\n' \
         "FRONTEND_URL=\${FRONTEND_URL_VAL}" \
-        "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
+        "VITE_API_BASE_URL=${VITE_API_BASE_URL_FROM_ACTION}" \ # Use value passed from Action
         "FIREBASE_ADMIN_SDK_JSON_CONTENT='\${FIREBASE_JSON_CONTENT}'" \
         "BACKEND_IMAGE_TAG=${IMAGE_TAG}" \
         "FRONTEND_IMAGE_TAG=${IMAGE_TAG}" \
+        "VITE_FIREBASE_API_KEY=\${VITE_FB_API_KEY}" \ # Add this line
+        "VITE_FIREBASE_AUTH_DOMAIN=\${VITE_FB_AUTH_DOMAIN}" \ # Add this line
+        "VITE_FIREBASE_PROJECT_ID=\${VITE_FB_PROJECT_ID}" \ # Add this line
+        "VITE_FIREBASE_STORAGE_BUCKET=\${VITE_FB_STORAGE_BUCKET}" \ # Add this line
+        "VITE_FIREBASE_MESSAGING_SENDER_ID=\${VITE_FB_MSG_SENDER_ID}" \ # Add this line
+        "VITE_FIREBASE_APP_ID=\${VITE_FB_APP_ID}" \ # Add this line
+        "VITE_FIREBASE_MEASUREMENT_ID=\${VITE_FB_MEASUREMENT_ID}" # Add this line (optional)
         > .env
         echo ".env file updated."
 
