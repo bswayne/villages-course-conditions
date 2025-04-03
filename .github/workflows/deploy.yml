@@ -9,7 +9,6 @@ env:
   BACKEND_IMAGE_NAME: villages-conditions-backend
   FRONTEND_IMAGE_NAME: villages-conditions-frontend
   IMAGE_TAG: ${{ github.sha }}
-  # VAULT_ADDR can be defined here or on server/in script
   VAULT_ADDR: https://vault.bcjs.us
   CLOUDFLARED_VERSION: "2024.3.0"
 
@@ -17,14 +16,11 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write 
       contents: read
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    # --- REMOVED Vault Auth & Secret Fetching Steps ---
 
     # 1. Set up Docker Buildx
     - name: Set up Docker Buildx
@@ -41,7 +37,7 @@ jobs:
         load: true
 
     - name: Build Frontend Image
-      id: build-frontend # Give step an ID to potentially get build args needed on server
+      id: build-frontend
       uses: docker/build-push-action@v5
       with:
         context: ./frontend
@@ -49,10 +45,8 @@ jobs:
         push: false
         tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest
         load: true
-        # We still need VITE_API_BASE_URL for the build, fetch from Vault HERE
-        # Or define it statically if it's fixed for production build
-        # build-args: |
-        #  VITE_API_BASE_URL=${{ secrets.PROD_API_BASE_URL }} # Example: Get from GH Secret
+        build-args: |
+          VITE_API_BASE_URL=${{ secrets.PROD_VITE_API_BASE_URL }}
     
      # 3. Install Cloudflared Client on Runner
     - name: Install Cloudflared
@@ -81,70 +75,81 @@ jobs:
 
     # 3. Deploy to Server via SSH
     - name: Deploy to Server
-      run: |
-        # --- SERVER-SIDE SCRIPT ---
-        export DEPLOY_DIR="/home/bswayne/villages-conditions" 
-        export VAULT_ADDR="${{ env.VAULT_ADDR }}" 
-        # Define paths to credentials ON THE SERVER
-        ROLE_ID_PATH="/etc/vault/approle_role_id" 
-        SECRET_ID_PATH="/etc/vault/approle_secret_id" 
+      uses: appleboy/ssh-action@v1.0.3
+      env: # Pass only necessary vars FROM Action TO Remote Script
+         IMAGE_TAG_ACTION: ${{ env.IMAGE_TAG }}
+         VAULT_ADDR_ACTION: ${{ env.VAULT_ADDR }} # Pass Vault address if not set on server
+         # Pass API URL if needed by backend CORS config written to .env
+         VITE_API_BASE_URL_ACTION: ${{ secrets.PROD_VITE_API_BASE_URL }}
+       
+      with:
+        host: deploy-server-via-tunnel # <-- Use the alias from ssh config
+        username: ${{ secrets.DEPLOY_USERNAME }} # User is implicitly defined by ssh config
+        key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} # Key is implicitly defined by ssh config
+        port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+        # Put the SERVER-SIDE script here
+        script: |
+          set -e # Exit on error
 
-        echo "--- Deploying to ${DEPLOY_DIR} ---"
-        cd /home/bswayne/villages-conditions || exit 1
+          # Variables for the remote script
+          # Use the correct path on YOUR server
+          export DEPLOY_DIR="/home/bswayne/villages-conditions" # <<< VERIFY/UPDATE THIS PATH
+          # Use VAULT_ADDR passed from GH Action env
+          export VAULT_ADDR="${VAULT_ADDR_ACTION}"
+          ROLE_ID_PATH="/etc/vault/approle_role_id"
+          SECRET_ID_PATH="/etc/vault/approle_secret_id"
 
-        # 1. Authenticate to Vault using AppRole Credentials from files
-        echo "--- Authenticating to Vault from server ---"
-        if [ ! -f "$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found at $ROLE_ID_PATH"; exit 1; fi
-        if [ ! -f "$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found at $SECRET_ID_PATH"; exit 1; fi
+          echo "--- Deploying to ${DEPLOY_DIR} ---"
+          # Create dir if needed, then CD
+          mkdir -p "$DEPLOY_DIR"
+          cd "$DEPLOY_DIR" || { echo "::error::Failed to cd into ${DEPLOY_DIR}"; exit 1; }
 
-        # Read credentials (handle potential errors)
-        VAULT_ROLE_ID=$(cat "$ROLE_ID_PATH")
-        VAULT_SECRET_ID=$(cat "$SECRET_ID_PATH") # Requires deployer user has read access via ACL/group
-        if [ -z "$VAULT_ROLE_ID" ]; then echo "::error::Failed to read RoleID"; exit 1; fi
-        if [ -z "$VAULT_SECRET_ID" ]; then echo "::error::Failed to read SecretID"; exit 1; fi
+          # Optional: Update code context if building on server
+          echo "--- Updating source code via git (optional) ---"
+          # git pull origin main # Uncomment if applicable
 
-        # Login using fetched credentials
-        VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID")
-        if [ -z "$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
-        echo "Vault AppRole login successful."
+          # 1. Authenticate to Vault from server
+          echo "--- Authenticating to Vault from server ---"
+          if [ ! -r "$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found or not readable at $ROLE_ID_PATH"; exit 1; fi
+          if [ ! -r "$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found or not readable at $SECRET_ID_PATH"; exit 1; fi
+          VAULT_ROLE_ID=$(cat "$ROLE_ID_PATH")
+          VAULT_SECRET_ID=$(cat "$SECRET_ID_PATH")
+          if [ -z "$VAULT_ROLE_ID" ] || [ -z "$VAULT_SECRET_ID" ]; then echo "::error::Failed to read RoleID/SecretID"; exit 1; fi
+          VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID")
+          if [ -z "$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
+          echo "Vault AppRole login successful (Token expires soon)."
 
-        # 2. Fetch secrets using the obtained token & write .env
-        echo "--- Fetching secrets and updating .env file ---"
-        BACKEND_SECRET_DATA=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/backend | jq -r '.data.data')
-        # ... (Fetch FRONTEND_SECRET_DATA similarly) ...
-        FRONTEND_SECRET_DATA=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/frontend | jq -r '.data.data')
+          # 2. Fetch secrets & write .env
+          echo "--- Fetching secrets and updating .env file ---"
+          BACKEND_SECRETS=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/backend)
+          FRONTEND_SECRETS=$(vault kv get -token="$VAULT_TOKEN" -format=json secret/ci/villages-conditions/frontend) # Needed for FRONTEND_URL for backend CORS
 
-        FIREBASE_JSON_CONTENT=$(echo "$BACKEND_SECRET_DATA" | jq -r '.FIREBASE_ADMIN_SDK_JSON')
-        FRONTEND_URL_VAL=$(echo "$BACKEND_SECRET_DATA" | jq -r '.FRONTEND_URL // "http://localhost:8080"')
-        VITE_API_URL_VAL=$(echo "$FRONTEND_SECRET_DATA" | jq -r '.VITE_API_BASE_URL // "/api"') # Still needed for backend CORS
+          FIREBASE_JSON_CONTENT=$(echo "$BACKEND_SECRETS" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
+          FRONTEND_URL_VAL=$(echo "$BACKEND_SECRETS" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
+          # API_URL_VAL=$(echo "$FRONTEND_SECRETS" | jq -r '.data.data.VITE_API_BASE_URL // "/api"') # We get this from Action env now
 
-        if [ -z "$FIREBASE_JSON_CONTENT" ] || [ "$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
+          if [ -z "$FIREBASE_JSON_CONTENT" ] || [ "$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
 
-        # Write .env
-        printf '%s\n' \
-        "FRONTEND_URL=${FRONTEND_URL_VAL}" \
-        "VITE_API_BASE_URL=${VITE_API_URL_VAL}" \
-        "FIREBASE_ADMIN_SDK_JSON_CONTENT='${FIREBASE_JSON_CONTENT}'" \
-        "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \ # Use tag passed from GH Action
-        "FRONTEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
-        > .env
-        echo ".env file updated."
+          # Write .env - use IMAGE_TAG_ACTION and VITE_API_BASE_URL_ACTION passed from Action env
+          printf '%s\n' \
+          "FRONTEND_URL=${FRONTEND_URL_VAL}" \
+          "VITE_API_BASE_URL=${VITE_API_BASE_URL_ACTION}" \ # Used by backend CORS
+          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${FIREBASE_JSON_CONTENT}'" \
+          "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
+          "FRONTEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
+          > .env
+          echo ".env file updated."
 
-          # 3. Load images (if needed - see previous discussion)
-          #    If images were built with 'load: true' they exist locally for docker on the runner,
-          #    but NOT automatically on the target server unless pushed/pulled or saved/loaded.
-          #    Using '--build' in compose on the server is often simplest if Dockerfiles are present.
-        echo "--- Ensure Dockerfiles and context are available on server or push/pull images ---"
-          # Example: Ensure code is up-to-date if building on server
-          # git pull origin main
+          # 3. Load/Tag Docker Images built by Actions Runner? NO - Rebuilding on Server
+          # If you used `load: true`, the images are on the runner's docker daemon only.
+          # The `--build` flag in `docker compose` assumes source code + Dockerfiles are here.
 
           # 4. Run Docker Compose
-        echo "--- Running docker compose up ---"
-          # Assumes docker-compose.yml has 'build:' sections if using --build
-        docker compose --env-file .env up -d --remove-orphans --force-recreate --build
+          echo "--- Running docker compose up ---"
+          docker compose --env-file .env up -d --remove-orphans --force-recreate --build
 
           # 5. Clean up
-        echo "--- Cleaning up dangling images ---"
-        docker image prune -f
+          echo "--- Cleaning up dangling images ---"
+          docker image prune -f
 
-        echo "--- Deployment complete! ---"
+          echo "--- Deployment complete! ---"
