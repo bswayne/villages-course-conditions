@@ -81,15 +81,13 @@ jobs:
         fi
 
         echo "Fetched backend secrets."
-        echo "::add-mask::$FIREBASE_JSON"
 
         echo "DEPLOY_FRONTEND_URL=$FRONTEND_URL_VAL" >> $GITHUB_ENV
 
-        echo "firebase_json<<EOF" >> $GITHUB_OUTPUT
-        echo "$FIREBASE_JSON" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        ENCODED_FIREBASE_JSON=$(echo -n "$FIREBASE_JSON" | base64 -w0)
+        echo "firebase_json_b64=$ENCODED_FIREBASE_JSON" >> $GITHUB_OUTPUT
 
-        echo "Backend secrets processed."
+        echo "Backend secrets processed and encoded."
 
     - name: Fetch Frontend Secrets from Vault
       id: fetch-frontend-secrets
@@ -181,8 +179,8 @@ jobs:
     # 6. Deploy to Local Server via SSH
     - name: Deploy to Server
       uses: appleboy/ssh-action@v1.0.3
-      env: 
-         FIREBASE_JSON_OUTPUT: ${{ steps.fetch-backend-secrets.outputs.firebase_json }}
+      env: # Pass the ENCODED version
+         FIREBASE_JSON_B64_OUTPUT: ${{ steps.fetch-backend-secrets.outputs.firebase_json_b64 }}
          DEPLOY_FRONTEND_URL_ACTION: ${{ env.DEPLOY_FRONTEND_URL }}
          VITE_API_BASE_URL_ACTION: ${{ env.VITE_API_BASE_URL }}
          IMAGE_TAG_ACTION: ${{ env.IMAGE_TAG }}
@@ -191,19 +189,26 @@ jobs:
         username: ${{ secrets.DEPLOY_USERNAME }}
         key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
         port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
-        # The script now uses env vars defined in the 'env:' block above
         script: |
-          export DEPLOY_DIR="/home/deployer/villages-conditions" # <<< UPDATE THIS PATH
+          export DEPLOY_DIR="/home/deployer/villages-conditions"
           echo "--- Deploying to ${DEPLOY_DIR} ---"
           mkdir -p $DEPLOY_DIR
           cd $DEPLOY_DIR || exit 1
 
-          echo "--- Updating .env file ---"
-          # Reference the env vars passed via the step's 'env:' block
+          echo "--- Decoding secrets and updating .env file ---"
+          # --- Decode the Base64 encoded JSON ---
+          DECODED_FIREBASE_JSON=$(echo "$FIREBASE_JSON_B64_OUTPUT" | base64 --decode)
+          if [ -z "$DECODED_FIREBASE_JSON" ]; then
+              echo "::error::Failed to decode Firebase JSON on server."
+              exit 1
+          fi
+          # --- End Decode ---
+
+          # Write the DECODED JSON to the .env file
           printf '%s\n' \
           "FRONTEND_URL=${DEPLOY_FRONTEND_URL_ACTION}" \
           "VITE_API_BASE_URL=${VITE_API_BASE_URL_ACTION}" \
-          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${FIREBASE_JSON_OUTPUT}'" \
+          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${DECODED_FIREBASE_JSON}'" \ # Use decoded var
           "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
           "FRONTEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
           > .env
