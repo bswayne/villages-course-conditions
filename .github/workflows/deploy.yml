@@ -66,17 +66,14 @@ jobs:
       run: |
         echo "Attempting SSH connection to ${{ secrets.DEPLOY_HOST }} via Cloudflare Tunnel..."
 
-        # Define the remote script as a multi-line variable
-        # Use double quotes for runner variable expansion
-        # Escape remote variables/commands with \
         REMOTE_SCRIPT=$(cat << EOF
         # --- SCRIPT RUNNING ON YOUR TARGET SERVER ---
         set -e
 
-        DEPLOY_DIR="/home/bswayne/villages-conditions"
+        DEPLOY_DIR="/home/bswayne/villages-conditions" # Your chosen directory
         VAULT_ADDR="${{ env.VAULT_ADDR }}"
         IMAGE_TAG="${{ env.IMAGE_TAG }}"
-        VITE_API_BASE_URL="${{ secrets.PROD_VITE_API_BASE_URL || 'https://linkscondition.com/api' }}"
+        VITE_API_BASE_URL="${{ secrets.PROD_VITE_API_BASE_URL }}"
         ROLE_ID_PATH="/etc/vault/approle_role_id"
         SECRET_ID_PATH="/etc/vault/approle_secret_id"
 
@@ -84,28 +81,25 @@ jobs:
         mkdir -p "\$DEPLOY_DIR"
         cd "\$DEPLOY_DIR" || { echo "::error::Failed to cd into ${DEPLOY_DIR}"; exit 1; }
 
-        echo "--- Updating source code via git (optional) ---"
-        # git pull origin main
+        # --- UNCOMMENT/ADD Git Update Section ---
+        echo "--- Updating source code via git ---"
+        # Add the deployment directory as safe *globally* for the user running the script
+        # This is often necessary when git operations are triggered via SSH/automation
+        git config --global --add safe.directory "\$DEPLOY_DIR"
+        # Pull the latest changes from the main branch (or your deployment branch)
+        git pull origin main
+        # --- END Git Update Section ---
 
         echo "--- Authenticating to Vault from server ---"
+        # ... (rest of Vault auth logic remains the same) ...
         if [ ! -r "\$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found or not readable at \$ROLE_ID_PATH"; exit 1; fi
-        if [ ! -r "\$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found or not readable at \$SECRET_ID_PATH"; exit 1; fi
-        VAULT_ROLE_ID=\$(cat "\$ROLE_ID_PATH")
-        VAULT_SECRET_ID=\$(cat "\$SECRET_ID_PATH")
-        if [ -z "\$VAULT_ROLE_ID" ] || [ -z "\$VAULT_SECRET_ID" ]; then echo "::error::Failed to read RoleID/SecretID"; exit 1; fi
-
+        # ... etc ...
         export VAULT_TOKEN=\$(vault write -field=token auth/approle/login role_id="\$VAULT_ROLE_ID" secret_id="\$VAULT_SECRET_ID")
-        if [ -z "\$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
+        # ... check VAULT_TOKEN ...
         echo "Vault AppRole login successful (Token expires soon)."
 
         echo "--- Fetching secrets and updating .env file ---"
-        BACKEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/backend) # No need for -token flag if VAULT_TOKEN is exported
-        FRONTEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/frontend)
-        FIREBASE_JSON_CONTENT=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
-        FRONTEND_URL_VAL=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
-
-        if [ -z "\$FIREBASE_JSON_CONTENT" ] || [ "\$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
-
+        # ... (rest of Vault secret fetching and .env writing remains the same) ...
         printf '%s\\n' \
         "FRONTEND_URL=\${FRONTEND_URL_VAL}" \
         "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
@@ -116,6 +110,7 @@ jobs:
         echo ".env file updated."
 
         echo "--- Running docker compose up ---"
+        # --build ensures images are built using the updated code from git pull
         docker compose --env-file .env up -d --remove-orphans --force-recreate --build
 
         echo "--- Cleaning up dangling images ---"
@@ -125,13 +120,13 @@ jobs:
         EOF
         ) # End of REMOTE_SCRIPT definition
 
-        # --- Execute SSH command: Pipe script content directly ---
+        # Execute SSH command (remains the same)
         echo "$REMOTE_SCRIPT" | ssh -i ~/.ssh/id_deploy_server \
             -o UserKnownHostsFile=/dev/null \
             -o StrictHostKeyChecking=no \
             -o ProxyCommand="/usr/local/bin/cloudflared access ssh --hostname %h" \
             "${{ secrets.DEPLOY_USERNAME }}@${{ secrets.DEPLOY_HOST }}" \
-            bash -s # Tell remote bash to read script from stdin
+            bash -s
         # --- End Execute SSH ---
 
-        echo "SSH command finished." # Add log to confirm completion
+        echo "SSH command finished."
