@@ -68,7 +68,7 @@ jobs:
         port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
         script: |
           # --- SERVER-SIDE SCRIPT ---
-          export DEPLOY_DIR="/home/deployer/villages-conditions" # <<< UPDATE THIS PATH
+          export DEPLOY_DIR="/home/bswayne/villages-conditions" # <<< UPDATE THIS PATH
           export VAULT_ADDR="${{ env.VAULT_ADDR }}" # Use VAULT_ADDR from GH Action env
           # Define paths to credentials ON THE SERVER
           ROLE_ID_PATH="/etc/vault/approle_role_id" # Adjust if you stored elsewhere
