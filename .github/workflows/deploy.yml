@@ -106,5 +106,5 @@ jobs:
             "${{ secrets.DEPLOY_USERNAME }}@${{ secrets.DEPLOY_HOST }}" \
             bash -s
         # --- End Execute SSH ---
-
+        echo "Is it working?."  
         echo "SSH command finished."
