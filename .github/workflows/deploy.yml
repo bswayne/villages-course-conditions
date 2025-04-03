@@ -61,33 +61,27 @@ jobs:
         chmod 600 ~/.ssh/id_deploy_server
         echo "SSH private key written to ~/.ssh/id_deploy_server"
        
-    # 5. Deploy to Server via SSH
+    # 5. Deploy via SSH using direct command and ProxyCommand
     - name: Deploy Application via SSH Tunnel
-      # REMOVE env block here, variables will be substituted directly in the script string
       run: |
         echo "Attempting SSH connection to ${{ secrets.DEPLOY_HOST }} via Cloudflare Tunnel..."
 
         # Define the remote script as a multi-line variable
-        # Use double quotes around EOF now to allow *local* (runner) variable expansion
-        # Escape shell variables ($VAR) inside the script meant for the *remote* server with \$
-        # Escape backticks if used remotely: \`command\`
-        # Escape EOF itself if needed: \EOF
+        # Use double quotes for runner variable expansion
+        # Escape remote variables/commands with \
         REMOTE_SCRIPT=$(cat << EOF
         # --- SCRIPT RUNNING ON YOUR TARGET SERVER ---
-        set -e # Exit immediately if a command exits with a non-zero status.
+        set -e
 
-        # Use variables substituted by the runner's shell *before* sending
-        DEPLOY_DIR="/home/bswayne/villages-conditions" # Hardcoded or use GH Var if needed
-        VAULT_ADDR="${{ env.VAULT_ADDR }}" # Use action env var
-        IMAGE_TAG="${{ env.IMAGE_TAG }}" # Use action env var
-        VITE_API_BASE_URL="${{ secrets.PROD_VITE_API_BASE_URL || 'https://linkscondition.com/api' }}" # Use secret/default
-
-        # Define paths to credentials ON THE SERVER
+        DEPLOY_DIR="/home/bswayne/villages-conditions"
+        VAULT_ADDR="${{ env.VAULT_ADDR }}"
+        IMAGE_TAG="${{ env.IMAGE_TAG }}"
+        VITE_API_BASE_URL="${{ secrets.PROD_VITE_API_BASE_URL || 'https://linkscondition.com/api' }}"
         ROLE_ID_PATH="/etc/vault/approle_role_id"
         SECRET_ID_PATH="/etc/vault/approle_secret_id"
 
         echo "--- Deploying to ${DEPLOY_DIR} ---"
-        mkdir -p "\$DEPLOY_DIR" # Escape $ for remote execution
+        mkdir -p "\$DEPLOY_DIR"
         cd "\$DEPLOY_DIR" || { echo "::error::Failed to cd into ${DEPLOY_DIR}"; exit 1; }
 
         echo "--- Updating source code via git (optional) ---"
@@ -96,24 +90,22 @@ jobs:
         echo "--- Authenticating to Vault from server ---"
         if [ ! -r "\$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found or not readable at \$ROLE_ID_PATH"; exit 1; fi
         if [ ! -r "\$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found or not readable at \$SECRET_ID_PATH"; exit 1; fi
-        VAULT_ROLE_ID=\$(cat "\$ROLE_ID_PATH") # Escape $ for remote command substitution
-        VAULT_SECRET_ID=\$(cat "\$SECRET_ID_PATH") # Escape $ for remote command substitution
+        VAULT_ROLE_ID=\$(cat "\$ROLE_ID_PATH")
+        VAULT_SECRET_ID=\$(cat "\$SECRET_ID_PATH")
         if [ -z "\$VAULT_ROLE_ID" ] || [ -z "\$VAULT_SECRET_ID" ]; then echo "::error::Failed to read RoleID/SecretID"; exit 1; fi
-        # Use VAULT_ADDR expanded locally
-        VAULT_TOKEN=\$(vault write -field=token auth/approle/login role_id="\$VAULT_ROLE_ID" secret_id="\$VAULT_SECRET_ID")
+
+        export VAULT_TOKEN=\$(vault write -field=token auth/approle/login role_id="\$VAULT_ROLE_ID" secret_id="\$VAULT_SECRET_ID")
         if [ -z "\$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
         echo "Vault AppRole login successful (Token expires soon)."
 
         echo "--- Fetching secrets and updating .env file ---"
-        BACKEND_SECRETS=\$(vault kv get -token="\$VAULT_TOKEN" -format=json secret/ci/villages-conditions/backend)
-        FRONTEND_SECRETS=\$(vault kv get -token="\$VAULT_TOKEN" -format=json secret/ci/villages-conditions/frontend)
+        BACKEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/backend) # No need for -token flag if VAULT_TOKEN is exported
+        FRONTEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/frontend)
         FIREBASE_JSON_CONTENT=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
         FRONTEND_URL_VAL=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
-        # VITE_API_URL_VAL=\$(echo "\$FRONTEND_SECRETS" | jq -r '.data.data.VITE_API_BASE_URL // "/api"') # Use value passed from action env
 
         if [ -z "\$FIREBASE_JSON_CONTENT" ] || [ "\$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
 
-        # Write .env - Use variables expanded locally by the runner
         printf '%s\\n' \
         "FRONTEND_URL=\${FRONTEND_URL_VAL}" \
         "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
@@ -133,13 +125,13 @@ jobs:
         EOF
         ) # End of REMOTE_SCRIPT definition
 
-        # Execute SSH command directly
-        # DO NOT pass VAR=VALUE before User@Host
-        ssh -i ~/.ssh/id_deploy_server \
+        # --- Execute SSH command: Pipe script content directly ---
+        echo "$REMOTE_SCRIPT" | ssh -i ~/.ssh/id_deploy_server \
             -o UserKnownHostsFile=/dev/null \
             -o StrictHostKeyChecking=no \
             -o ProxyCommand="/usr/local/bin/cloudflared access ssh --hostname %h" \
-            "${{ secrets.DEPLOY_USERNAME }}@${{ secrets.DEPLOY_HOST }}" \ # Just User@Host
-            "bash -s" << EOF # Pipe the script via stdin
-        $REMOTE_SCRIPT
-        EOF
+            "${{ secrets.DEPLOY_USERNAME }}@${{ secrets.DEPLOY_HOST }}" \
+            bash -s # Tell remote bash to read script from stdin
+        # --- End Execute SSH ---
+
+        echo "SSH command finished." # Add log to confirm completion
