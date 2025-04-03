@@ -66,24 +66,30 @@ jobs:
         echo "Fetching secrets from ${{ env.BACKEND_SECRETS_PATH }}"
         SECRET_RESPONSE=$(curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
              "${{ env.VAULT_ADDR }}/v1/${{ env.BACKEND_SECRETS_PATH }}")
-        # Check for successful response and data
-        if echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
-          FIREBASE_JSON=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
-          FRONTEND_URL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"') # Provide default
-          # Check if secrets were actually found
-          if [ -z "$FIREBASE_JSON" ] || [ "$FIREBASE_JSON" == "null" ]; then echo "::error::FIREBASE_ADMIN_SDK_JSON not found in Vault"; exit 1; fi
-          echo "Fetched backend secrets."
-          # Export for subsequent steps & mask the sensitive one
-          echo "FIREBASE_ADMIN_SDK_JSON_CONTENT<<EOF" >> $GITHUB_ENV
-          echo "$FIREBASE_JSON" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          echo "::add-mask::$FIREBASE_JSON"
-          echo "DEPLOY_FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
-        else
+        
+        if ! echo "$SECRET_RESPONSE" | jq -e '.data.data' > /dev/null; then
           echo "::error::Failed to fetch backend secrets or data is empty. Response:"
           echo "$SECRET_RESPONSE"
           exit 1
         fi
+
+        FIREBASE_JSON=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
+        FRONTEND_URL_VAL=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
+
+        if [ -z "$FIREBASE_JSON" ] || [ "$FIREBASE_JSON" == "null" ]; then
+          echo "::error::FIREBASE_ADMIN_SDK_JSON not found in Vault"; exit 1;
+        fi
+
+        echo "Fetched backend secrets."
+        echo "::add-mask::$FIREBASE_JSON"
+
+        echo "DEPLOY_FRONTEND_URL=$FRONTEND_URL_VAL" >> $GITHUB_ENV
+
+        echo "firebase_json<<EOF" >> $GITHUB_OUTPUT
+        echo "$FIREBASE_JSON" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "Backend secrets processed."
 
     - name: Fetch Frontend Secrets from Vault
       id: fetch-frontend-secrets
@@ -102,11 +108,13 @@ jobs:
         echo "$SECRET_RESPONSE" | jq -r '.data.data | to_entries[] | select(.key | startswith("VITE_")) | "\(.key)=\(.value)"' >> $GITHUB_ENV
 
         API_BASE_URL_CHECK=$(echo "$SECRET_RESPONSE" | jq -r '.data.data.VITE_API_BASE_URL // ""')
-
         if [ -z "$API_BASE_URL_CHECK" ]; then
-            echo "::warning::VITE_API_BASE_URL not found or empty in Vault, setting default '/api' for build-args."
-            # Set the default directly in GITHUB_ENV if it wasn't found by the jq export
+            echo "::warning::VITE_API_BASE_URL not found or empty in Vault, setting default '/api' in GITHUB_ENV."
+            # Explicitly set the default in GITHUB_ENV if it wasn't found above
             echo "VITE_API_BASE_URL=/api" >> $GITHUB_ENV
+        else
+             # Optional: Echo the value found if you want confirmation
+             echo "VITE_API_BASE_URL found in Vault and exported."
         fi
 
         echo "Frontend VITE_ variables prepared for GITHUB_ENV."
@@ -149,18 +157,19 @@ jobs:
         context: ./backend
         file: ./backend/Dockerfile
         push: false # Set to true if pushing to a registry
-        tags: ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.BACKEND_IMAGE_NAME }}:latest # Add registry prefix if pushing
-        # No build args needed here - secrets are handled at runtime
+        tags: ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.BACKEND_IMAGE_NAME }}:latest
+        load: true
 
-    - name: Build and Push Frontend Image
+    - name: Build Frontend Image
       uses: docker/build-push-action@v5
       with:
         context: ./frontend
         file: ./frontend/Dockerfile
-        push: false # Set to true if pushing to a registry
-        tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest # Add registry prefix if pushing
+        push: false
+        tags: ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }},${{ env.FRONTEND_IMAGE_NAME }}:latest
+        load: true 
         build-args: |
-          VITE_API_BASE_URL=${{ env.DEPLOY_VITE_API_BASE_URL }}
+          VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
           VITE_FIREBASE_API_KEY=${{ env.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN=${{ env.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID=${{ env.VITE_FIREBASE_PROJECT_ID }}
@@ -172,67 +181,49 @@ jobs:
     # 6. Deploy to Local Server via SSH
     - name: Deploy to Server
       uses: appleboy/ssh-action@v1.0.3
+      env: 
+         FIREBASE_JSON_OUTPUT: ${{ steps.fetch-backend-secrets.outputs.firebase_json }}
+         DEPLOY_FRONTEND_URL_ACTION: ${{ env.DEPLOY_FRONTEND_URL }}
+         VITE_API_BASE_URL_ACTION: ${{ env.VITE_API_BASE_URL }}
+         IMAGE_TAG_ACTION: ${{ env.IMAGE_TAG }}
       with:
-        host: ${{ secrets.DEPLOY_HOST }} # IP or hostname of your local server (Store in GitHub Secrets)
-        username: ${{ secrets.DEPLOY_USERNAME }} # User on the server (Store in GitHub Secrets)
-        key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} # Private SSH key for the user (Store in GitHub Secrets)
-        port: ${{ secrets.DEPLOY_SSH_PORT || 22 }} # SSH port (optional, defaults to 22)
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USERNAME }}
+        key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+        # The script now uses env vars defined in the 'env:' block above
         script: |
-          # Navigate to the deployment directory on the server
-          # Replace with the actual path where your docker-compose.yml is located
-          export DEPLOY_DIR="/path/to/your/deployment/villages-conditions"
+          export DEPLOY_DIR="/home/deployer/villages-conditions" # <<< UPDATE THIS PATH
+          echo "--- Deploying to ${DEPLOY_DIR} ---"
           mkdir -p $DEPLOY_DIR
-          cd $DEPLOY_DIR
+          cd $DEPLOY_DIR || exit 1
 
-          # (Optional) Copy docker-compose.yml if not already on server
-          # Consider checking it into git and pulling instead
-          # echo "${{ github.workspace }}/docker-compose.yml" # Debug: Check path
-          # You might need to scp the file or ensure it's pulled via git on the server
+          echo "--- Updating .env file ---"
+          # Reference the env vars passed via the step's 'env:' block
+          printf '%s\n' \
+          "FRONTEND_URL=${DEPLOY_FRONTEND_URL_ACTION}" \
+          "VITE_API_BASE_URL=${VITE_API_BASE_URL_ACTION}" \
+          "FIREBASE_ADMIN_SDK_JSON_CONTENT='${FIREBASE_JSON_OUTPUT}'" \
+          "BACKEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
+          "FRONTEND_IMAGE_TAG=${IMAGE_TAG_ACTION}" \
+          > .env
 
-          # Create/Update .env file with secrets fetched from Vault
-          # IMPORTANT: Ensure proper quoting for the multi-line JSON content
-          echo "Creating/Updating .env file on server..."
-          cat <<EOF > .env
-          # Environment variables for docker-compose
-          FRONTEND_URL=${{ env.DEPLOY_FRONTEND_URL }}
-          VITE_API_BASE_URL=${{ env.DEPLOY_VITE_API_BASE_URL }}
-          # Escape special characters in JSON for the .env file if necessary,
-          # but docker-compose should handle multi-line vars okay with <<EOF
-          FIREBASE_ADMIN_SDK_JSON_CONTENT='${{ env.FIREBASE_ADMIN_SDK_JSON_CONTENT }}'
-          # Define image tags for docker-compose to use
-          BACKEND_IMAGE_TAG=${{ env.IMAGE_TAG }}
-          FRONTEND_IMAGE_TAG=${{ env.IMAGE_TAG }}
-          EOF
+          if [ ! -s .env ]; then
+              echo "::error::Failed to write .env file on server."
+              exit 1
+          fi
           echo ".env file updated."
 
-          # Update docker-compose.yml to use the tags from .env
-          # (Modify your docker-compose.yml ONCE to use these variables)
-          # Example modification in docker-compose.yml:
-          # services:
-          #   backend:
-          #     image: ${{ env.BACKEND_IMAGE_NAME }}:${BACKEND_IMAGE_TAG:-latest} # Use tag from .env, fallback to latest
-          #     build: ./backend # Keep build context for local dev if needed
-          #   frontend:
-          #     image: ${{ env.FRONTEND_IMAGE_NAME }}:${FRONTEND_IMAGE_TAG:-latest}
-          #     build: # ...
+          # Load built images if not pushing/pulling (requires docker save/load or different strategy)
+          # This part is tricky without pushing to a registry.
+          # For now, assuming --build in docker compose uses local context
+          # Ensure your docker-compose.yml has 'build:' contexts defined
 
-          # Login to registry if you pushed images (use credentials stored on server or pass via secrets)
-          # echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-          # echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "--- Running docker compose up ---"
+          # Use --build flag if you didn't push/pull images
+          docker compose --env-file .env up -d --remove-orphans --force-recreate --build
 
-          # Pull the specific tagged images (if you pushed them)
-          # docker pull ${{ env.BACKEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          # docker pull ${{ env.FRONTEND_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-          # Use Docker Compose to recreate and start containers
-          # --remove-orphans cleans up old containers if service names change
-          # Docker compose automatically picks up the .env file in the same directory
-          # Ensure docker-compose V2 is installed (usually `docker compose`)
-          echo "Running docker compose up..."
-          docker compose --env-file .env up -d --remove-orphans --force-recreate --build # Add --build if you didn't push/pull
-
-          # (Optional) Clean up dangling images
-          echo "Cleaning up dangling Docker images..."
+          echo "--- Cleaning up dangling images ---"
           docker image prune -f
 
-          echo "Deployment complete!"
+          echo "--- Deployment complete! ---"
