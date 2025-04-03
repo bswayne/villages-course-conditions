@@ -61,15 +61,23 @@ jobs:
         # --- END Git Update Section ---
 
         echo "--- Authenticating to Vault from server ---"
-        # ... (rest of Vault auth logic remains the same) ...
         if [ ! -r "\$ROLE_ID_PATH" ]; then echo "::error::RoleID file not found or not readable at \$ROLE_ID_PATH"; exit 1; fi
-        # ... etc ...
+        if [ ! -r "\$SECRET_ID_PATH" ]; then echo "::error::SecretID file not found or not readable at \$SECRET_ID_PATH"; exit 1; fi
+        VAULT_ROLE_ID=\$(cat "\$ROLE_ID_PATH")
+        VAULT_SECRET_ID=\$(cat "\$SECRET_ID_PATH")
+        if [ -z "\$VAULT_ROLE_ID" ] || [ -z "\$VAULT_SECRET_ID" ]; then echo "::error::Failed to read RoleID/SecretID"; exit 1; fi
+
         export VAULT_TOKEN=\$(vault write -field=token auth/approle/login role_id="\$VAULT_ROLE_ID" secret_id="\$VAULT_SECRET_ID")
-        # ... check VAULT_TOKEN ...
+        if [ -z "\$VAULT_TOKEN" ]; then echo "::error::Vault AppRole login failed"; exit 1; fi
         echo "Vault AppRole login successful (Token expires soon)."
 
         echo "--- Fetching secrets and updating .env file ---"
-        # ... (rest of Vault secret fetching and .env writing remains the same) ...
+        BACKEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/backend) 
+        FRONTEND_SECRETS=\$(vault kv get -format=json secret/ci/villages-conditions/frontend)
+        FIREBASE_JSON_CONTENT=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FIREBASE_ADMIN_SDK_JSON')
+        FRONTEND_URL_VAL=\$(echo "\$BACKEND_SECRETS" | jq -r '.data.data.FRONTEND_URL // "http://localhost:8080"')
+
+        if [ -z "\$FIREBASE_JSON_CONTENT" ] || [ "\$FIREBASE_JSON_CONTENT" == "null" ]; then echo "::error::Failed to get FIREBASE_ADMIN_SDK_JSON from Vault"; exit 1; fi
         printf '%s\\n' \
         "FRONTEND_URL=\${FRONTEND_URL_VAL}" \
         "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
