@@ -6,7 +6,6 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-COPY .env .env
 
 # ARG for build-time environment variable
 # Default fallback if not provided during build
