@@ -12,7 +12,7 @@ exports.getUserProfile = async (req, res) => {
         if (!userDoc.exists) {
             // If profile doesn't exist in 'users', create a basic one? Or return 404?
             // Option: Return basic info from auth token
-            console.log(`User profile not found in Firestore for UID: ${userId}. Returning basic info.`);
+            // console.log(`User profile not found in Firestore for UID: ${userId}. Returning basic info.`);
             // You might want to create a basic profile upon first login instead.
              return res.status(200).json({
                   userId: userId,
@@ -79,8 +79,6 @@ exports.updateUserProfile = async (req, res) => {
         // Use set with merge:true to create the doc if it doesn't exist, or update existing fields
         await userDocRef.set(updateData, { merge: true });
 
-        console.log(`User profile updated for UID: ${userId} with displayName: ${displayName}`);
-
         // Fetch the updated profile to return it
         const updatedDoc = await userDocRef.get();
         const updatedUserData = updatedDoc.data();
@@ -99,9 +97,9 @@ exports.updateUserProfile = async (req, res) => {
 
         try {
             await admin.auth().updateUser(userId, {
-                 displayName: profileData.displayName // Use the final display name from Firestore
+                 displayName: profileData.displayName 
              });
-            console.log(`Successfully updated Firebase Auth display name for ${userId}`);
+            // console.log(`Successfully updated Firebase Auth display name for ${userId}`);
          } catch (authError) {
             console.error(`Failed to update Firebase Auth display name for ${userId}:`, authError);
              // Log the error but don't fail the whole request just for this

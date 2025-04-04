@@ -37,7 +37,7 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).send('Something broke!');
 });
-console.log(`Current NODE_ENV: ${process.env.NODE_ENV}`);
+// console.log(`Current NODE_ENV: ${process.env.NODE_ENV}`);
 // --- Start Server ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

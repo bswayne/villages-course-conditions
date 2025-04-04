@@ -20,7 +20,7 @@ if (process.env.NODE_ENV === 'production') {
 
 } else {
   // --- DEVELOPMENT MODE: Load from local JSON file ---
-  console.log("Running in development mode: Loading Firebase credentials from local file.");
+  // console.log("Running in development mode: Loading Firebase credentials from local file.");
   try {
       // IMPORTANT: Adjust the path relative to where this firebase.js file is located
       // Assuming firebase.js is in the root of the backend folder:
@@ -37,7 +37,7 @@ try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
-  console.log("Firebase Admin SDK initialized successfully.");
+  // console.log("Firebase Admin SDK initialized successfully.");
 } catch (initError) {
   console.error("Firebase Admin SDK initialization failed:", initError);
   throw new Error("Could not initialize Firebase Admin SDK.");

@@ -12,9 +12,6 @@ import {
   // Add other auth methods if needed: createUserWithEmailAndPassword, etc.
 } from 'firebase/auth';
 
-console.log('VITE_FIREBASE_API_KEY:', import.meta.env.VITE_FIREBASE_API_KEY);
-console.log('VITE_FIREBASE_PROJECT_ID:', import.meta.env.VITE_FIREBASE_PROJECT_ID);
-console.log('All VITE vars:', JSON.stringify(import.meta.env, null, 2));
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -32,7 +29,6 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
   // depending on how critical Firebase is immediately.
 } else {
   console.log("Firebase config loaded from environment variables.");
-  // console.log(firebaseConfig); // Optional: Log config during dev, remove for prod
 }
 
 // Initialize Firebase

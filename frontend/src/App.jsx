@@ -11,7 +11,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 // import SignupPage from './pages/SignupPage'; // If adding signup
 // import NotFoundPage from './pages/NotFoundPage'; // If adding 404
-import './App.css'; // Keep your global styles
+import './App.css'; 
 
 function App() {
   return (

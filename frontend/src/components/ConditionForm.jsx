@@ -24,6 +24,8 @@ function ConditionForm({ courseId, onConditionAdded, onCancel }) {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const customGreen = 'rgb(0, 73, 44)';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');

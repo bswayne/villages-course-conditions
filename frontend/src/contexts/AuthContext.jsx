@@ -19,7 +19,7 @@ export function AuthProvider({ children }) {
     try {
         // The api instance should automatically add the token from localStorage
         const response = await api.get('/user/profile');
-        console.log("Fetched user profile in AuthContext:", response.data);
+        // console.log("Fetched user profile in AuthContext:", response.data);
         setUserProfile(response.data);
     } catch (error) {
         console.error("AuthContext: Failed to fetch user profile:", error);
