@@ -6,13 +6,11 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onIdTokenChanged,
-  GoogleAuthProvider, // <-- Import Google provider
-  OAuthProvider,      // <-- Import generic OAuth provider for Apple
-  signInWithPopup,    // <-- Import signInWithPopup
+  GoogleAuthProvider, 
+  OAuthProvider, 
+  signInWithPopup, 
   // Add other auth methods if needed: createUserWithEmailAndPassword, etc.
 } from 'firebase/auth';
-//import { firebaseConfig } from './firebaseConfig'; // Ensure path is correct
-
 
 console.log('VITE_FIREBASE_API_KEY:', import.meta.env.VITE_FIREBASE_API_KEY);
 console.log('VITE_FIREBASE_PROJECT_ID:', import.meta.env.VITE_FIREBASE_PROJECT_ID);

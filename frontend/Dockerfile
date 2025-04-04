@@ -6,11 +6,11 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+COPY .env .env
 
 # ARG for build-time environment variable
 # Default fallback if not provided during build
 ARG VITE_API_BASE_URL=/api 
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
 ENV VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
