@@ -8,7 +8,7 @@ exports.getConditionsByCourse = async (req, res) => {
         // Validate courseId exists in the unofficial_locations collection
         const locationDoc = await db.collection('unofficial_locations').doc(courseId).get();
         if (!locationDoc.exists) {
-            console.log(`[getConditions] Course/Location with ID ${courseId} not found in unofficial_locations.`);
+            // console.log(`[getConditions] Course/Location with ID ${courseId} not found in unofficial_locations.`);
             return res.status(404).send('Course not found');
         }
 
@@ -50,7 +50,7 @@ exports.getConditionsByCourse = async (req, res) => {
         if (error.code === 9 /* FAILED_PRECONDITION */ && error.details?.includes('index')) {
              console.error("Firestore query requires a composite index. Please create it using the link in the error details or the Firebase Console.", error);
              // Optionally send a more specific error message back
-             // return res.status(500).send("Database configuration error: Missing index. See server logs.");
+             return res.status(500).send("Database configuration error: Missing index. See server logs.");
         } else {
             console.error('Error fetching conditions:', error);
         }
@@ -98,7 +98,7 @@ exports.addCondition = async (req, res) => {
         // Validate courseId exists in the unofficial_locations collection
         const locationDoc = await db.collection('unofficial_locations').doc(courseId).get();
         if (!locationDoc.exists) {
-             console.log(`[addCondition] Attempt to add condition for non-existent Course/Location ID ${courseId}.`);
+            //  console.log(`[addCondition] Attempt to add condition for non-existent Course/Location ID ${courseId}.`);
              return res.status(404).send('Course not found');
          }
 
@@ -117,7 +117,7 @@ exports.addCondition = async (req, res) => {
 
         // Add to the NEW collection
         const docRef = await db.collection('villages_course_conditions').add(newConditionData);
-        console.log(`Condition report added to villages_course_conditions with ID: ${docRef.id}`);
+        // console.log(`Condition report added to villages_course_conditions with ID: ${docRef.id}`);
 
         // Return the newly created data (fetch it back to get server timestamp?)
         // Or just construct it client-side approximately
