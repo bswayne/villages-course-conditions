@@ -10,6 +10,8 @@ import App from './App.jsx';
 import { AuthProvider } from './contexts/AuthContext'; // Adjust path if needed
 
 const customGreen = 'rgb(0, 73, 44)';
+const hoverGreenBackground = 'rgba(0, 73, 44, 0.08)';
+const hoverGreenText = 'rgb(0, 100, 60)'; 
 // Define a basic theme (optional, MUI has a default)
 const theme = createTheme({
   // You can customize palette, typography, etc. here
@@ -19,40 +21,56 @@ const theme = createTheme({
       main: customGreen,
       contrastText: '#ffffff', // Ensure text/icons on primary background are white
     },
+    action: {
+      // Override the default hover opacity/color if desired (affects many components)
+      // hover: hoverGreenBackground,
+    },
     components: {
-      MuiButton: {
-          styleOverrides: {
-              // Target outlined buttons specifically
-              outlined: ({ theme, ownerState }) => ({
-                  // Example: Make primary outlined buttons use the green
-                  ...(ownerState.color === 'primary' && {
-                       color: theme.palette.primary.main,
-                       borderColor: theme.palette.primary.main,
-                       '&:hover': {
-                           borderColor: theme.palette.primary.main,
-                           backgroundColor: theme.palette.action.hover, // Default hover or customize
-                       },
-                  }),
-                  // Example: Make secondary outlined buttons use the green
-                  // ...(ownerState.color === 'secondary' && {
-                  //      color: customGreen, // Use direct value if not primary/secondary
-                  //      borderColor: customGreen,
-                  //      // ... hover ...
-                  // }),
-              }),
-              // Target outlined buttons on dark backgrounds (like AppBar)
-              // This is trickier and might need specific context or sx prop still
-          }
+      // --- Button Overrides ---
+    MuiButton: {
+      styleOverrides: {
+        // Target contained buttons (primary color)
+        containedPrimary: {
+          '&:hover': {
+            backgroundColor: hoverGreenText, // Darken slightly on hover
+          },
+        },
+        // Target outlined buttons (primary color)
+        outlinedPrimary: {
+          '&:hover': {
+            backgroundColor: hoverGreenBackground, // Use light background on hover
+            borderColor: customGreen, // Keep border color consistent
+          },
+        },
+        // Target text buttons (primary color)
+        textPrimary: {
+          '&:hover': {
+            backgroundColor: hoverGreenBackground, // Use light background on hover
+          },
+        },
       },
-      MuiAppBar: {
+    },
+        // --- Link Overrides ---
+        MuiLink: {
           styleOverrides: {
-              // Apply to the root AppBar element
-              root: ({ theme }) => ({
-                   backgroundColor: theme.palette.primary.main, // Use primary color
-                   color: theme.palette.primary.contrastText, // Use contrast text for icons/text
-              }),
-          }
+            root: ({ theme }) => ({ // Use theme object here
+              color: theme.palette.primary.main, // Default link color is primary green
+              '&:hover': {
+                color: hoverGreenText, // Use the brighter green on hover
+                textDecoration: 'underline', // Optional: ensure underline on hover
+              },
+            }),
+          },
+        },
+        // --- AppBar Overrides (already looks okay, just confirming) ---
+    MuiAppBar: {
+      styleOverrides: {
+          root: ({ theme }) => ({
+               backgroundColor: theme.palette.primary.main,
+               color: theme.palette.primary.contrastText,
+          }),
       }
+  },
     }
  }
 });

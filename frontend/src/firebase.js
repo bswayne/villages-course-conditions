@@ -8,7 +8,8 @@ import {
   onIdTokenChanged,
   GoogleAuthProvider, 
   OAuthProvider, 
-  signInWithPopup, 
+  signInWithPopup,
+  createUserWithEmailAndPassword, 
   // Add other auth methods if needed: createUserWithEmailAndPassword, etc.
 } from 'firebase/auth';
 
@@ -55,5 +56,6 @@ export {
   GoogleAuthProvider, // <-- Export
   OAuthProvider,      // <-- Export
   signInWithPopup,    // <-- Export
+  createUserWithEmailAndPassword,
   // Export others as needed
 };

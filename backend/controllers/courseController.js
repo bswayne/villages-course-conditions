@@ -41,12 +41,12 @@ exports.getAllCourses = async (req, res) => {
         const batchSize = 30; // Firestore 'in' query limit (use 30 for v1 queries)
         const fetchPromises = [];
 
-        console.log(`Fetching conditions for ${courseIds.length} courses in batches of ${batchSize}`);
+        // console.log(`Fetching conditions for ${courseIds.length} courses in batches of ${batchSize}`);
 
         for (let i = 0; i < courseIds.length; i += batchSize) {
             const batchIds = courseIds.slice(i, i + batchSize);
             if (batchIds.length > 0) {
-                console.log(` - Fetching batch starting at index ${i} with ${batchIds.length} IDs`);
+                // console.log(` - Fetching batch starting at index ${i} with ${batchIds.length} IDs`);
                 const conditionsQuery = db.collection('villages_course_conditions')
                                           .where('course_id', 'in', batchIds)
                                           .where('date_played', '>=', sevenDaysAgoString)
@@ -67,7 +67,7 @@ exports.getAllCourses = async (req, res) => {
             });
         });
 
-         console.log(`Fetched total ${recentConditions.length} recent conditions.`);
+        //  console.log(`Fetched total ${recentConditions.length} recent conditions.`);
 
         // 4. Calculate average rating for each course (same logic as before)
         const coursesWithAvgRating = locationsSnapshot.docs.map(doc => {

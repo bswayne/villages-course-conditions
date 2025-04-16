@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext'; // Adjust path
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import { Grid } from '@mui/material';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
@@ -179,13 +180,13 @@ const handleEmailPasswordSubmit = async (e) => {
                 {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
               </Button>
                {/* Optional Signup Link */}
-              {/* <Grid container justifyContent="flex-end">
+              <Grid container justifyContent="flex-end">
                  <Grid>
                    <Link component={RouterLink} to="/signup" variant="body2">
                      {"Don't have an account? Sign Up"}
                    </Link>
                  </Grid>
-               </Grid> */}
+               </Grid>
             </Box>
 
             {/* --- Divider --- */}
