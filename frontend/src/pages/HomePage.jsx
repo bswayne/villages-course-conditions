@@ -76,9 +76,8 @@ function HomePage() {
 
     return (
       <Container
-        maxWidth={isMobile ? false : 'lg'} // Go full width on mobile, default lg on desktop
-                                          // Or try maxWidth="xs" for mobile
-        disableGutters={isMobile}         // Remove padding on mobile if going full width
+        maxWidth={isMobile ? false : 'lg'}                                     
+        disableGutters={isMobile}         
       sx={{ py: 4 }}
       >
             <Typography variant="h4" component="h1" gutterBottom align="center">
@@ -110,9 +109,6 @@ function HomePage() {
                      <Card
                           key={course.id}
                           variant="outlined"
-                          // sx={{
-                          //  //   width: '100%', 
-                          // }}
                       >
                           <CardContent>
                               {/* ... CardContent remains the same ... */}

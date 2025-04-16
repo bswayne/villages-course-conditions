@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext'; 
 import HomePage from './pages/HomePage';
 import LandingPage from './pages/LandingPage';
@@ -19,20 +19,30 @@ function RootRedirect() {
   const { currentUser, loading } = useAuth();
 
   if (loading) {
-    // Optionally show a loading indicator here, or rely on ProtectedRoute's loading
     return null; // Or a spinner component
   }
-
-  // If logged in, redirect to the main app page.
-  // If not logged in, show the LandingPage.
   return currentUser ? <Navigate to="/select-course-type" replace /> : <LandingPage />;
 }
 
 function App() {
+
+  const location = useLocation();
+  const isLandingPage = location.pathname === '/';
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Navbar />
-      <Box component="main" sx={{ flexGrow: 1, py: 3, px: { xs: 2, sm: 3 } }}>
+      {!isLandingPage && <Navbar />}
+      <Box
+          component="main"
+          sx={{
+              flexGrow: 1,
+              pt: isLandingPage ? { xs: 2, sm: 4 } : { xs: 2, sm: 3 },
+              pb: { xs: 2, sm: 3 }, // Keep bottom padding consistent
+              px: { xs: 2, sm: 3 }
+          }}
+      >
+      {/* <Navbar /> */}
+      {/* <Box component="main" sx={{ flexGrow: 1, py: 3, px: { xs: 2, sm: 3 } }}> */}
         <Routes>
           {/* Public route - Login Page */}
           <Route path="/login" element={<LoginPage />} />
