@@ -135,7 +135,14 @@ function LandingPage() {
                 </Grid>
             </Paper>
             {/* --- End App Promotion Section --- */}
-
+            <Typography
+                variant="caption"
+                color="text.secondary"
+                align="center"
+                sx={{ display: 'block', mt: 10 }} // Add margin-top and ensure it's a block element
+            >
+                Copyright © 2025, Unofficial Software. All Rights Reserved.
+            </Typography>
 
         </Container>
     );
