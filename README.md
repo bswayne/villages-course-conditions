@@ -175,36 +175,37 @@ This project uses GitHub Actions for automated deployment upon pushing to the `m
 *   Appropriate firewall rules (if any).
 
 ## 📂 Project Structure
+```
 .
-├── .github/workflows/ # GitHub Actions CI/CD workflows
-│ └── deploy.yml
-├── backend/ # Node.js/Express backend
-│ ├── controllers/ # Route handlers (business logic)
-│ ├── middleware/ # Custom middleware (e.g., auth)
-│ ├── models/ # (Optional) Data models/schemas
-│ ├── routes/ # Express route definitions
-│ ├── .env.example # Example environment variables
-│ ├── app.js # Express app setup
-│ ├── Dockerfile # Backend Docker build instructions
-│ ├── firebase.js # Firebase Admin SDK initialization
-│ └── package.json
-├── frontend/ # React/Vite frontend
-│ ├── public/ # Static assets served directly
-│ ├── src/ # Frontend source code
-│ │ ├── assets/ # Images, fonts, etc.
-│ │ ├── components/ # Reusable UI components
-│ │ ├── contexts/ # React contexts (e.g., AuthContext)
-│ │ ├── pages/ # Page-level components
-│ │ ├── services/ # API interaction (e.g., axios instance)
-│ │ ├── App.jsx # Main application component with routing
-│ │ ├── firebase.js # Firebase Client SDK initialization
-│ │ └── main.jsx # Application entry point
-│ ├── .env.example # Example environment variables
-│ ├── Dockerfile # Frontend Docker build instructions (multi-stage)
-│ ├── index.html # HTML entry point for Vite
-│ ├── nginx.conf # Nginx configuration for serving frontend/proxying backend
-│ ├── package.json
-│ └── vite.config.js # Vite configuration
-├── .gitignore # Files/directories to ignore in Git
-├── docker-compose.yml # Docker Compose definition for services
-└── README.md # This file
+├── .github/workflows/      # GitHub Actions CI/CD workflows
+│   └── deploy.yml
+├── backend/                # Node.js/Express backend
+│   ├── controllers/        # Route handlers (business logic)
+│   ├── middleware/         # Custom middleware (e.g., auth)
+│   ├── models/             # (Optional) Data models/schemas
+│   ├── routes/             # Express route definitions
+│   ├── .env.example        # Example environment variables
+│   ├── app.js              # Express app setup
+│   ├── Dockerfile          # Backend Docker build instructions
+│   ├── firebase.js         # Firebase Admin SDK initialization
+│   └── package.json
+├── frontend/               # React/Vite frontend
+│   ├── public/             # Static assets served directly
+│   ├── src/                # Frontend source code
+│   │   ├── assets/         # Images, fonts, etc.
+│   │   ├── components/     # Reusable UI components
+│   │   ├── contexts/       # React contexts (e.g., AuthContext)
+│   │   ├── pages/          # Page-level components
+│   │   ├── services/       # API interaction (e.g., axios instance)
+│   │   ├── App.jsx         # Main application component with routing
+│   │   ├── firebase.js     # Firebase Client SDK initialization
+│   │   └── main.jsx        # Application entry point
+│   ├── .env.example        # Example environment variables
+│   ├── Dockerfile          # Frontend Docker build instructions (multi-stage)
+│   ├── index.html          # HTML entry point for Vite
+│   ├── nginx.conf          # Nginx configuration for serving frontend/proxying backend
+│   ├── package.json
+│   └── vite.config.js      # Vite configuration
+├── .gitignore              # Files/directories to ignore in Git
+├── docker-compose.yml      # Docker Compose definition for services
+└── README.md               # This file ```
