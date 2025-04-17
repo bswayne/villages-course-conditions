@@ -5,8 +5,7 @@ const db = admin.firestore();
 const typeMapping = {
     'executive': 'Executive Golf Course',
     'championship': 'Championship Golf Course',
-    'pitch-putt': 'Pitch & Putt' // Add future types here
-    // Add more mappings as needed
+    'pitch-putt': 'Pitch & Putt' 
 };
 
 // Fetch courses, potentially filtered by type

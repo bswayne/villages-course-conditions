@@ -49,7 +49,7 @@ function LandingPage() {
                 Welcome to Links Conditions
             </Typography>
             <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-                Get the latest user-reported conditions for Executive and Championship golf courses in The Villages.
+                Get the latest user-reported conditions for golf courses in The Villages.
             </Typography>
 
             <Stack
