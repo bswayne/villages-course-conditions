@@ -6,9 +6,9 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 
-import executiveImage from '../assets/executive_golf.jpg';
-import championshipImage from '../assets/championship_golf.jpg';
-import pitchAndPuttImage from '../assets/pitch_and_putt.jpg';
+import executiveImage from '../assets/executive_golf.png';
+import championshipImage from '../assets/championship_golf.png';
+import pitchAndPuttImage from '../assets/pitch_and_putt.png';
 
 
 function CourseTypeSelectionPage() {
