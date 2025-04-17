@@ -14,9 +14,9 @@ import mediumImage from '../assets/vcc_medium.jpg'; // 640w
 import fullsizeImage from '../assets/vcc_fullsize.jpg'; // 1496w
 import appIcon from '../assets/unofficial_guide_icon.jpg';
 
-// --- Import Icons for Store Buttons ---
-import AppleIcon from '@mui/icons-material/Apple';
-import StorefrontIcon from '@mui/icons-material/Storefront';
+import appStoreIcon from '../assets/badge-app-store-286x88.png'; 
+import googlePlayIcon from '../assets/badge-google-play-286x88.png';
+
 
 function LandingPage() {
     const appleLink = "https://apps.apple.com/us/app/unofficial-guide/id6593660910";
@@ -96,27 +96,40 @@ function LandingPage() {
                             Unofficial Guide - The Villages
                         </Typography>
                         <Stack direction="row" spacing={2} justifyContent="center">
-                            {/* App Store Button */}
-                            <Button
-                                variant="contained"
-                                startIcon={<AppleIcon />}
+                            {/* App Store Link/Badge */}
+                            <a
                                 href={appleLink}
-                                target="_blank" // Open in new tab
-                                rel="noopener noreferrer" // Security best practice
-                                sx={{ backgroundColor: '#000', '&:hover': {backgroundColor: '#333'} }} // Basic Apple-like style
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ textDecoration: 'none' }} // Remove underline from link
                             >
-                                App Store
-                            </Button>
-                             {/* Google Play Button */}
-                             <Button
-                                variant="outlined"
-                                startIcon={<StorefrontIcon />} // Using generic store icon
+                                <img
+                                    src={appStoreIcon}
+                                    alt="Download on the App Store"
+                                    style={{
+                                        width: '120px', // Set desired width
+                                        height: 'auto',   // Maintain aspect ratio
+                                        verticalAlign: 'middle' // Align images nicely if heights differ slightly
+                                    }}
+                                />
+                            </a>
+                            {/* Google Play Link/Badge */}
+                            <a
                                 href={googleLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                             >
-                                Google Play
-                             </Button>
+                                style={{ textDecoration: 'none' }}
+                            >
+                                 <img
+                                    src={googlePlayIcon}
+                                    alt="Get it on Google Play"
+                                    style={{
+                                        width: '120px', // Set desired width
+                                        height: 'auto',
+                                        verticalAlign: 'middle'
+                                    }}
+                                />
+                             </a>
                         </Stack>
                     </Grid>
                 </Grid>

@@ -32,7 +32,7 @@ function ProtectedRoute({ children }) {
     // User not logged in, redirect to login page
     // Pass the current location in state so we can redirect back after login
     // Use 'replace' to avoid adding the protected route to history when redirecting
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   // User is logged in, render the child component (the actual page)

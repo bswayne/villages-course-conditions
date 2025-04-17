@@ -3,10 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
     auth,
-    createUserWithEmailAndPassword, // <-- Import this
-    // Import other providers if you allow signup via Google/Apple too
-} from '../firebase'; // Adjust path
-import { useAuth } from '../contexts/AuthContext'; // Adjust path
+    createUserWithEmailAndPassword,
+    GoogleAuthProvider, 
+    OAuthProvider,      
+    signInWithPopup, 
+} from '../firebase'; 
+import { useAuth } from '../contexts/AuthContext'; 
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -18,11 +20,15 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link'; // MUI Link
 import Grid from '@mui/material/Grid';
+import Divider from '@mui/material/Divider'; 
+import Stack from '@mui/material/Stack';   
+import GoogleIcon from '@mui/icons-material/Google'; 
+import AppleIcon from '@mui/icons-material/Apple';
 
 function SignupPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState(''); // <-- Add confirmation
+    const [confirmPassword, setConfirmPassword] = useState(''); 
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -65,6 +71,59 @@ function SignupPage() {
             setLoading(false);
         }
     };
+
+      // --- Google Sign-In Handler ---
+      const handleGoogleSignIn = async () => {
+        setError('');
+        setLoading(true);
+        const provider = new GoogleAuthProvider();
+        try {
+          await signInWithPopup(auth, provider);
+          // handleLoginSuccess(); // Let useEffect handle redirect based on currentUser change
+        } catch (err) {
+          console.error('Error signing in with Google:', err);
+          setError(getFriendlyErrorMessage(err));
+        } finally {
+          setLoading(false);
+        }
+      };
+    
+      // --- Apple Sign-In Handler ---
+      const handleAppleSignIn = async () => {
+        // ... (Apple sign-in logic) ...
+       setError('');
+       setLoading(true);
+       const provider = new OAuthProvider('apple.com');
+       provider.addScope('email');
+       provider.addScope('name');
+       try {
+         await signInWithPopup(auth, provider);
+        // handleLoginSuccess(); // Let useEffect handle redirect based on currentUser change
+       } catch (err) {
+         console.error('Error signing in with Apple:', err);
+         setError(getFriendlyErrorMessage(err));
+       } finally {
+         setLoading(false);
+       }
+     };
+    
+      // Helper to make Firebase errors more user-friendly
+      const getFriendlyErrorMessage = (error) => {
+        switch (error.code) {
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+                return 'Invalid email or password.';
+            case 'auth/popup-closed-by-user':
+                return 'Sign-in window closed before completion.';
+            case 'auth/cancelled-popup-request':
+                return 'Multiple sign-in windows opened. Please close others and try again.';
+            case 'auth/account-exists-with-different-credential':
+                 return 'An account already exists with the same email address but different sign-in credentials. Try signing in using the original method.';
+            // Add more specific cases as needed
+            default:
+                return error.message || 'An unknown error occurred during sign-in.';
+            }
+        };
 
     // Helper for signup-specific errors
     const getFriendlySignupErrorMessage = (error) => {
@@ -164,6 +223,42 @@ function SignupPage() {
                                 </Grid>
                             </Grid>
                         </Box>
+                        
+                        {/* --- Divider --- */}
+                        <Divider sx={{ width: '100%', my: 2 }}>OR</Divider>
+                        <Stack spacing={2} sx={{ width: '100%' }}>
+              <Button
+                variant="outlined"
+                fullWidth
+                startIcon={<GoogleIcon />}
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                sx={{ justifyContent: 'center' }} // Center content including icon
+              >
+                Sign in with Google
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                startIcon={<AppleIcon />}
+                onClick={handleAppleSignIn}
+                disabled={loading}
+                // Style Apple button more distinctly if desired
+                sx={{
+                    backgroundColor: 'common.black', // Apple button background
+                    color: 'common.white', // Apple button text
+                    justifyContent: 'center',
+                    '&:hover': {
+                       backgroundColor: '#333', // Darken on hover
+                    },
+                    // Disabled state will be handled by MUI `disabled` prop styling
+                }}
+              >
+                Sign in with Apple
+              </Button>
+            </Stack>
+                        
+
                     </Box>
                 </CardContent>
             </Card>
