@@ -1,5 +1,5 @@
 # Use an official Node runtime as a parent image
-FROM node:23-alpine-slim AS builder
+FROM node:23-alpine AS builder
 
 WORKDIR /usr/src/app
 
